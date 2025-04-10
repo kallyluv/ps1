@@ -290,7 +290,6 @@ Get-ExecutablesFromPrefetch
 Add-Content -Path $outputFile -Value "`n======== SYSTEM EVENT SCAN ========"
 Get-ExecutionHistoryFromEventLogs
 Get-RecentlyClosedApps
-Start-Sleep -Milliseconds 2500
 Clear-Host
 
 
