@@ -345,3 +345,4 @@ Write-Host "`n                   PC Scans Complete!"
 Start-Sleep -Milliseconds 2500
 
 Invoke-Item -Path $outputFile
+Exit
