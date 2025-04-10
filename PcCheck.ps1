@@ -9,7 +9,7 @@ function Test-Administrator {
 
 if (-not (Test-Administrator)) {
 	$cmd = "irm `"https://bit.ly/luvvr-pc-check`" | iex"
-	$arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd } | pause"
+	$arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd }"
 	Start-Process powershell.exe -ArgumentList $arguments -Verb runAs
 	exit
 }
