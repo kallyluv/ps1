@@ -6,7 +6,8 @@ function Test-Administrator {
 }
 
 if (-not (Test-Administrator)) {
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { irm `"https://bit.ly/luvvr-pc-check`" | iex } "
+	$cmd = "irm `"https://bit.ly/luvvr-pc-check`" | iex"
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd } | pause"
     Start-Process powershell.exe -ArgumentList $arguments -Verb runAs
     exit
 }
