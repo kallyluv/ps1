@@ -105,6 +105,25 @@ function Get-ExecutablesFromMuiCache {
 	Write-Host ">> MUI Cache scan complete!`n"
 }
 
+# === FUNCTION: Read Executables from AppSwitched ===
+function Get-AppSwitched {
+	Write-Host "Scanning AppSwitched..."
+	$keypath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"
+
+	if (Test-Path $keypath) {
+		$entries = Get-ItemProperty -Path $keypath
+		foreach ($entry in $entries.PSObject.Properties) {
+			if ($entry.Name -match "\S+\.exe") {
+				Add-Content -Path $outputFile -Value "$($entry.Name)"
+			}
+		}
+	}
+	else {
+		Add-Content -Path $outputFile -Value "Registry path not found: $keypath"
+	}
+	Write-Host ">> AppSwitched scan complete!`n"
+}
+
 # === FUNCTION: Read Executables from Registry ===
 function Get-ExecutablesFromRegistry {
 	Write-Host "Scanning Registry for Executables..."
@@ -132,17 +151,17 @@ function Get-ExecutablesFromRegistry {
 
 # === FUNCTION: Read Executables from Encoded Registry ===
 function Get-EncodedExecutablesFromRegistry {
-    Write-Host "Scanning Encoded Registry Sectors for Executables..."
-    $keyPaths = @(
-        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\Count",
-        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\Count"
-    )
+	Write-Host "Scanning Encoded Registry Sectors for Executables..."
+	$keyPaths = @(
+		"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\Count",
+		"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\Count"
+	)
 
-    foreach ($key in $keyPaths) {
+	foreach ($key in $keyPaths) {
 		if (Test-Path $key) {
 			$entries = Get-ItemProperty -Path $key
 			foreach ($entry in $entries.PSObject.Properties) {
-                $decodedEntry = Convert-ROT13 -InputString "$($entry.Name)"
+				$decodedEntry = Convert-ROT13 -InputString "$($entry.Name)"
 				if ($decodedEntry -match "\S+\.exe") {
 					Add-Content -Path $outputFile -Value "$($decodedEntry)"
 				}
@@ -319,7 +338,7 @@ function Get-FirmwareSecurityState {
 # === RUN ALL CHECKS ===
 Write-Host "`n======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
 Write-Host "`n                    Starting PC Scans..."
-Start-Sleep -Seconds 4
+Start-Sleep -Seconds 3
 Clear-Host
 
 Write-Host "`n[INFO] Starting PC scan -> Executables Data...`n"
@@ -327,6 +346,7 @@ Add-Content -Path $outputFile -Value "`n======== REGISTRY & CACHE SCAN ========"
 Get-ExecutablesFromMuiCache
 Get-ExecutablesFromRegistry
 Get-EncodedExecutablesFromRegistry
+Get-AppSwitched
 
 Add-Content -Path $outputFile -Value "`n======== PREFETCH SCAN ========"
 Get-ExecutablesFromPrefetch
