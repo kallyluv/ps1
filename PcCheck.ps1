@@ -32,6 +32,24 @@ Add-Content -Path $outputFile -Value "`nPC Check Started: $(Get-Date -Format 'yy
 Add-Content -Path $outputFile -Value "Full Internal File Scan + Hardware Scan"
 Add-Content -Path $outputFile -Value "========================================"
 
+# === FUNCTION: Decode ROT13 Strings ===
+function Convert-ROT13 {
+    param (
+        [string]$InputString
+    )
+
+    return ($InputString.ToCharArray() | ForEach-Object {
+        $c = [int][char]$_
+        if ($c -ge 65 -and $c -le 90) {
+            [char](65 + (($c - 65 + 13) % 26))
+        } elseif ($c -ge 97 -and $c -le 122) {
+            [char](97 + (($c - 97 + 13) % 26))
+        } else {
+            $_
+        }
+    }) -join ''
+}
+
 # === FUNCTION: Get Execution History from Event Logs ===
 function Get-ExecutionHistoryFromEventLogs {
 	Write-Host "Scanning Windows Security Event Logs (4688)..."
@@ -110,6 +128,31 @@ function Get-ExecutablesFromRegistry {
 		}
 	}
 	Write-Host ">> Registry scan complete!`n"
+}
+
+# === FUNCTION: Read Executables from Encoded Registry ===
+function Get-EncodedExecutablesFromRegistry {
+    Write-Host "Scanning Encoded Registry Sectors for Executables..."
+    $keyPaths = @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\Count",
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\Count"
+    )
+
+    foreach ($key in $keyPaths) {
+		if (Test-Path $key) {
+			$entries = Get-ItemProperty -Path $key
+			foreach ($entry in $entries.PSObject.Properties) {
+                $decodedEntry = Convert-ROT13 -InputString "$($entry.Name)"
+				if ($decodedEntry -match "\S+\.exe") {
+					Add-Content -Path $outputFile -Value "$($decodedEntry)"
+				}
+			}
+		}
+		else {
+			Add-Content -Path $outputFile -Value "Registry path not found: $key"
+		}
+	}
+	Write-Host ">> Encoded Registry scan complete!`n"
 }
 
 # === FUNCTION: Open Network Ports ===
@@ -283,6 +326,7 @@ Write-Host "`n[INFO] Starting PC scan -> Executables Data...`n"
 Add-Content -Path $outputFile -Value "`n======== REGISTRY & CACHE SCAN ========"
 Get-ExecutablesFromMuiCache
 Get-ExecutablesFromRegistry
+Get-EncodedExecutablesFromRegistry
 
 Add-Content -Path $outputFile -Value "`n======== PREFETCH SCAN ========"
 Get-ExecutablesFromPrefetch
