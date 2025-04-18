@@ -32,27 +32,64 @@ Add-Content -Path $outputFile -Value "`nPC Check Started: $(Get-Date -Format 'yy
 Add-Content -Path $outputFile -Value "Full Internal File Scan + Hardware Scan"
 Add-Content -Path $outputFile -Value "========================================"
 
+# === FUNCTION: Centered Write-Host
+function Write-HostCenter { 
+	param($Message) 
+	
+	Write-Host ("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor($Message.Length / 2)))), $Message) 
+}
+
+# === FUNCTION: Resize Window
+function Set-WindowSize {
+	param (
+		[Parameter(Mandatory = $true)]
+		[int]$Width,
+
+		[Parameter(Mandatory = $true)]
+		[int]$Height
+	)
+
+	try {
+		$console = $Host.UI.RawUI
+		# Adjust buffer size if needed
+		$bufferSize = $console.BufferSize
+		$bufferSize.Width = $Width
+		$bufferSize.Height = $Height
+		$console.BufferSize = $bufferSize
+
+		# Set window size
+		$newSize = $console.WindowSize
+		$newSize.Width = $Width
+		$newSize.Height = $Height
+		$console.WindowSize = $newSize
+	}
+	catch {
+	}
+}
+
 # === FUNCTION: Decode ROT13 Strings ===
 function Convert-ROT13 {
-    param (
-        [string]$InputString
-    )
+	param (
+		[string]$InputString
+	)
 
-    return ($InputString.ToCharArray() | ForEach-Object {
-        $c = [int][char]$_
-        if ($c -ge 65 -and $c -le 90) {
-            [char](65 + (($c - 65 + 13) % 26))
-        } elseif ($c -ge 97 -and $c -le 122) {
-            [char](97 + (($c - 97 + 13) % 26))
-        } else {
-            $_
-        }
-    }) -join ''
+	return ($InputString.ToCharArray() | ForEach-Object {
+			$c = [int][char]$_
+			if ($c -ge 65 -and $c -le 90) {
+				[char](65 + (($c - 65 + 13) % 26))
+			}
+			elseif ($c -ge 97 -and $c -le 122) {
+				[char](97 + (($c - 97 + 13) % 26))
+			}
+			else {
+				$_
+			}
+		}) -join ''
 }
 
 # === FUNCTION: Get Execution History from Event Logs ===
 function Get-ExecutionHistoryFromEventLogs {
-	Write-Host "Scanning Windows Security Event Logs (4688)..."
+	Write-HostCenter "Scanning Windows Security Event Logs (4688)..."
 	try {
 		$events = Get-WinEvent -LogName Security -FilterHashtable @{Id = 4688 } -MaxEvents 1000
 		foreach ($event in $events) {
@@ -67,12 +104,12 @@ function Get-ExecutionHistoryFromEventLogs {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to read event logs: $_"
 	}
-	Write-Host ">> Event log scan complete!`n"
+	Write-HostCenter ">> Event log scan complete! <<`n"
 }
 
 # === FUNCTION: Read Prefetch Folder ===
 function Get-ExecutablesFromPrefetch {
-	Write-Host "Scanning Windows Prefetch..."
+	Write-HostCenter "Scanning Windows Prefetch..."
 	$prefetchDir = "C:\Windows\Prefetch"
 	if (Test-Path $prefetchDir) {
 		Get-ChildItem -Path $prefetchDir -Filter "*.pf" | ForEach-Object {
@@ -84,12 +121,12 @@ function Get-ExecutablesFromPrefetch {
  else {
 		Add-Content -Path $outputFile -Value "Prefetch folder not found."
 	}
-	Write-Host ">> Prefetch scan complete!`n"
+	Write-HostCenter ">> Prefetch scan complete! <<`n"
 }
 
 # === FUNCTION: Read MUI Cache Registry ===
 function Get-ExecutablesFromMuiCache {
-	Write-Host "Scanning MUI Cache Registry..."
+	Write-HostCenter "Scanning MUI Cache Registry..."
 	$keyPath = "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"
 	if (Test-Path $keyPath) {
 		$entries = Get-ItemProperty -Path $keyPath
@@ -102,12 +139,12 @@ function Get-ExecutablesFromMuiCache {
  else {
 		Add-Content -Path $outputFile -Value "MuiCache not found."
 	}
-	Write-Host ">> MUI Cache scan complete!`n"
+	Write-HostCenter ">> MUI Cache scan complete! <<`n"
 }
 
 # === FUNCTION: Read Executables from AppSwitched ===
 function Get-AppSwitched {
-	Write-Host "Scanning AppSwitched..."
+	Write-HostCenter "Scanning AppSwitched..."
 	$keypath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"
 
 	if (Test-Path $keypath) {
@@ -121,12 +158,12 @@ function Get-AppSwitched {
 	else {
 		Add-Content -Path $outputFile -Value "Registry path not found: $keypath"
 	}
-	Write-Host ">> AppSwitched scan complete!`n"
+	Write-HostCenter ">> AppSwitched scan complete! <<`n"
 }
 
 # === FUNCTION: Read Executables from Registry ===
 function Get-ExecutablesFromRegistry {
-	Write-Host "Scanning Registry for Executables..."
+	Write-HostCenter "Scanning Registry for Executables..."
 	$keyPaths = @(
 		"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU",
 		"HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU",
@@ -146,12 +183,12 @@ function Get-ExecutablesFromRegistry {
 			Add-Content -Path $outputFile -Value "Registry path not found: $key"
 		}
 	}
-	Write-Host ">> Registry scan complete!`n"
+	Write-HostCenter ">> Registry scan complete! <<`n"
 }
 
 # === FUNCTION: Read Executables from Encoded Registry ===
 function Get-EncodedExecutablesFromRegistry {
-	Write-Host "Scanning Encoded Registry Sectors for Executables..."
+	Write-HostCenter "Scanning Encoded Registry Sectors for Executables..."
 	$keyPaths = @(
 		"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\Count",
 		"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\Count"
@@ -171,12 +208,12 @@ function Get-EncodedExecutablesFromRegistry {
 			Add-Content -Path $outputFile -Value "Registry path not found: $key"
 		}
 	}
-	Write-Host ">> Encoded Registry scan complete!`n"
+	Write-HostCenter ">> Encoded Registry scan complete! <<`n"
 }
 
 # === FUNCTION: Open Network Ports ===
 function Get-OpenNetworkPorts {
-	Write-Host "Scanning Open Network Ports..."
+	Write-HostCenter "Scanning Open Network Ports..."
 	Add-Content -Path $outputFile -Value "`n======== NETWORK PORT SCAN ========"
 	try {
 		$netStats = Get-NetTCPConnection | Where-Object { $_.State -eq "Listen" }
@@ -196,12 +233,12 @@ function Get-OpenNetworkPorts {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to retrieve port info: $_"
 	}
-	Write-Host ">> Port scan complete!`n"
+	Write-HostCenter ">> Port scan complete! <<`n"
 }
 
 # === FUNCTION: DMA-capable Devices ===
 function Get-DMADevices {
-	Write-Host "Scanning Devices..."
+	Write-HostCenter "Scanning Devices..."
 	Add-Content -Path $outputFile -Value "`n======== DEVICE SCAN ========"
 	try {
 		$devices = Get-PnpDevice -PresentOnly | Where-Object { $_.FriendlyName -match "USB|Thunderbolt|1394|DMA" }
@@ -212,12 +249,12 @@ function Get-DMADevices {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to check DMA-related devices: $_"
 	}
-	Write-Host ">> Device scan complete!`n"
+	Write-HostCenter ">> Device scan complete! <<`n"
 }
 
 # === FUNCTION: PCIe Devices (like GPU) ===
 function Get-PCIeDevices {
-	Write-Host "Scanning PCIe Devices..."
+	Write-HostCenter "Scanning PCIe Devices..."
 	Add-Content -Path $outputFile -Value "`n======== PCIE SCAN ========"
 	try {
 		$pcieDevices = Get-PnpDevice -PresentOnly | Where-Object {
@@ -237,12 +274,12 @@ function Get-PCIeDevices {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to scan PCIe devices: $_"
 	}
-	Write-Host ">> PCIe device scan complete!`n"
+	Write-HostCenter ">> PCIe device scan complete! <<`n"
 }
 
 # === FUNCTION: Recently Closed Applications ===
 function Get-RecentlyClosedApps {
-	Write-Host "Scanning Recently Closed Applications..."
+	Write-HostCenter "Scanning Recently Closed Applications..."
 	Add-Content -Path $outputFile -Value "`n======== RECENTLY CLOSED APPLICATIONS ========"
 	try {
 		$stoppedEvents = Get-WinEvent -LogName "Microsoft-Windows-WMI-Activity/Operational" -MaxEvents 200 |
@@ -265,12 +302,12 @@ function Get-RecentlyClosedApps {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to read closed app data: $_"
 	}
-	Write-Host ">> Recently closed app scan complete!`n"
+	Write-HostCenter ">> Recently closed app scan complete! <<`n"
 }
 
 # === FUNCTION: BIOS & Motherboard Info ===
 function Get-BIOSInfo {
-	Write-Host "Collecting BIOS Information..."
+	Write-HostCenter "Collecting BIOS Information..."
 	Add-Content -Path $outputFile -Value "`n======== BIOS INFORMATION ========"
 	try {
 		$bios = Get-CimInstance -ClassName Win32_BIOS
@@ -281,11 +318,11 @@ function Get-BIOSInfo {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to retrieve BIOS info: $_"
 	}
-	Write-Host ">> BIOS info collected!`n"
+	Write-HostCenter ">> BIOS info collected! <<`n"
 }
 
 function Get-MotherboardInfo {
-	Write-Host "Collecting Motherboard & I/O Information..."
+	Write-HostCenter "Collecting Motherboard & I/O Information..."
 	Add-Content -Path $outputFile -Value "`n======== MOTHERBOARD INFORMATION ========"
 	try {
 		$board = Get-CimInstance -ClassName Win32_BaseBoard
@@ -296,12 +333,12 @@ function Get-MotherboardInfo {
  catch {
 		Add-Content -Path $outputFile -Value "Failed to retrieve motherboard info: $_"
 	}
-	Write-Host ">> Motherboard info collected!`n"
+	Write-HostCenter ">> Motherboard info collected! <<`n"
 }
 
 # === FUNCTION: BIOS DMA-Related Settings (via Windows) ===
 function Get-FirmwareSecurityState {
-	Write-Host "Checking Firmware Information..."
+	Write-HostCenter "Checking Firmware Information..."
 	Add-Content -Path $outputFile -Value "`n======== FIRMWARE INFORMATION ========"
 	try {
 		$secureBoot = Confirm-SecureBootUEFI
@@ -332,16 +369,19 @@ function Get-FirmwareSecurityState {
  catch {
 		Add-Content -Path $outputFile -Value "TPM: Unable to query"
 	}
-	Write-Host ">> Firmware security checks complete!`n"
+	Write-HostCenter ">> Firmware security checks complete! <<`n"
 }
 
 # === RUN ALL CHECKS ===
-Write-Host "`n======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
-Write-Host "`n                    Starting PC Scans..."
+Write-Host ""
+Write-HostCenter "======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
+Write-Host ""
+Write-HostCenter "Starting PC Scans..."
 Start-Sleep -Seconds 3
 Clear-Host
 
-Write-Host "`n[INFO] Starting PC scan -> Executables Data...`n"
+Write-Host ""
+Write-HostCenter "[INFO] Starting PC scan -> Executables Data...`n"
 Add-Content -Path $outputFile -Value "`n======== REGISTRY & CACHE SCAN ========"
 Get-ExecutablesFromMuiCache
 Get-ExecutablesFromRegistry
@@ -354,10 +394,11 @@ Get-ExecutablesFromPrefetch
 Add-Content -Path $outputFile -Value "`n======== SYSTEM EVENT SCAN ========"
 Get-ExecutionHistoryFromEventLogs
 Get-RecentlyClosedApps
+Start-Sleep -Milliseconds 500
 Clear-Host
 
-
-Write-Host "`n[INFO] Starting Deep PC scan -> Hardware Scan`n"
+Write-Host ""
+Write-HostCenter "[INFO] Starting Deep PC scan -> Hardware Scan`n"
 Get-OpenNetworkPorts
 Get-DMADevices
 Get-PCIeDevices
@@ -368,10 +409,13 @@ Get-FirmwareSecurityState
 Add-Content -Path $outputFile -Value "`n========================================"
 Add-Content -Path $outputFile -Value "Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
 Add-Content -Path $outputFile -Value "`nWritten by @imluvvr & @ScaRMR6 on X"
+Start-Sleep -Milliseconds 500
 Clear-Host
 
-Write-Host "`n======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
-Write-Host "`n                   PC Scans Complete!"
+Write-Host ""
+Write-HostCenter "======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========"
+Write-Host ""
+Write-HostCenter "PC Scans Complete!"
 Start-Sleep -Milliseconds 2500
 
 Invoke-Item -Path $outputFile
