@@ -8,7 +8,8 @@ function Test-Administrator {
 }
 
 if (-not (Test-Administrator)) {
-	$cmd = "irm `"https://bit.ly/luvvr-pc-check`" | iex"
+	$argString = $args -join " "
+	$cmd = "iex `"& { `$(irm `"https://bit.ly/luvvr-pc-check`") } $argString`""
 	$arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd }"
 	Start-Process powershell.exe -ArgumentList $arguments -Verb runAs
 	exit
