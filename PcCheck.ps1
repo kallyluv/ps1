@@ -14,6 +14,8 @@ if (-not (Test-Administrator)) {
 	exit
 }
 
+$extras = $args;
+
 # === SETUP ===
 $storagePath = "$env:USERPROFILE\Documents\PC Scans"
 if (-not (Test-Path $storagePath)) {
@@ -38,16 +40,16 @@ function Write-HostCenter {
 		$Message,
 
 		[ConsoleColor]$Color = "White",
-        [ConsoleColor]$Background = ($Host.UI.RawUI.BackgroundColor),
+		[ConsoleColor]$Background = ($Host.UI.RawUI.BackgroundColor),
 
 		[bool]$Bold = $false
 	) 
 
 	$originalFg = $Host.UI.RawUI.ForegroundColor
-    $originalBg = $Host.UI.RawUI.BackgroundColor
+	$originalBg = $Host.UI.RawUI.BackgroundColor
 
-    $Host.UI.RawUI.BackgroundColor = $Background
-    $Host.UI.RawUI.ForegroundColor = $Color
+	$Host.UI.RawUI.BackgroundColor = $Background
+	$Host.UI.RawUI.ForegroundColor = $Color
 
 	if ($Bold) {
 		$esc = [char]27
@@ -59,7 +61,7 @@ function Write-HostCenter {
 		Write-Host ("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor($Message.Length / 2)))), $Message) 
 	}
 	$Host.UI.RawUI.ForegroundColor = $originalFg
-    $Host.UI.RawUI.BackgroundColor = $originalBg
+	$Host.UI.RawUI.BackgroundColor = $originalBg
 }
 
 # === FUNCTION: Resize Window
@@ -133,7 +135,7 @@ function Get-ExecutionHistoryFromEventLogs {
 # === FUNCTION: Read Prefetch Folder ===
 function Get-ExecutablesFromPrefetch {
 	Write-HostCenter "Scanning Windows Prefetch..." -Color Green -Bold $true
-	$prefetchDir = "C:\Windows\Prefetch"
+	$prefetchDir = "$($ENV:SystemRoot)\Prefetch"
 	if (Test-Path $prefetchDir) {
 		Get-ChildItem -Path $prefetchDir -Filter "*.pf" | ForEach-Object {
 			$exeName = $_.Name -replace "\.pf$", ""
@@ -395,6 +397,38 @@ function Get-FirmwareSecurityState {
 	Write-HostCenter ">> Firmware security checks complete! <<`n" -Color DarkGreen
 }
 
+# === FUNCTION: Extra Scans
+function Get-ExtraScans {
+	foreach ($g in $extras) {
+		switch ($g.ToString().ToLower()) {
+			"r6" {
+				$uids = @()
+				Write-Host ""
+				Write-HostCenter "Revealing all Rainbow Six Siege Accounts..." -Color Green
+				$folders = @(
+					"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\savegames",
+					"$($ENV:LOCALAPPDATA)\Ubisoft Game Launcher\spool"
+				)
+				foreach ($folder in $folders) {
+					if (Test-Path "$folder") {
+						Get-ChildItem -Path $folder | ForEach-Object {
+							$uids += $_.Name
+						}
+					}
+				}
+				$uids = $uids | Select-Object -Unique
+				Write-Host ""
+				foreach ($uid in $uids) {
+					Start-Process "https://stats.cc/siege/$uid"
+					Write-HostCenter "Found $uid" -Color DarkGreen
+				}
+				Write-Host ""
+				Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
+			}
+		}
+	}
+}
+
 # === RUN ALL CHECKS ===
 Write-Host ""
 Write-HostCenter "======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========" -Color Magenta
@@ -434,6 +468,12 @@ Add-Content -Path $outputFile -Value "Scan Completed: $(Get-Date -Format 'yyyy-M
 Add-Content -Path $outputFile -Value "`nWritten by @imluvvr & @ScaRMR6 on X"
 Start-Sleep -Milliseconds 800
 Clear-Host
+
+Write-Host ""
+Write-HostCenter "======== Running All Extra Checks ========" -Color Magenta
+Write-Host ""
+Get-ExtraScans
+Start-Sleep -Seconds 2
 
 Write-Host ""
 Write-HostCenter "======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========" -Color Magenta
