@@ -7,9 +7,9 @@ function Test-Administrator {
 	return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+$argString = $args -join " "
+Write-Host "$argString"
 if (-not (Test-Administrator)) {
-	$argString = $args -join " "
-	Write-Host "$argString"
 	$cmd = "iex `"& { `$(irm `"https://bit.ly/luvvr-pc-check`") } $argString`""
 	$arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd }"
 	Start-Process powershell.exe -ArgumentList $arguments -Verb runAs
