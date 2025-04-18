@@ -1,42 +1,151 @@
-# === PRELOAD ===
+#region PRELOAD
 Clear-Host
 $ProgressPreference = 'SilentlyContinue'
+Add-Type -AssemblyName System.Windows.Forms
 function Test-Administrator {
 	$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 	$principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
 	return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
-
-$argString = $args -join " "
-Write-Host "$argString"
 if (-not (Test-Administrator)) {
-	$cmd = "iex `"& { `$(irm `"https://bit.ly/luvvr-pc-check`") } $argString`""
-	$arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd }"
+	$scriptUrl = 'https://bit.ly/luvvr-pc-check'
+	$cmd = "irm `"$scriptUrl`" | iex"
+	$arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $cmd }`""
 	Start-Process powershell.exe -ArgumentList $arguments -Verb runAs
 	exit
 }
 
-$extras = $args;
+#region Global Variables
 
-# === SETUP ===
-$storagePath = "$env:USERPROFILE\Documents\PC Scans"
-if (-not (Test-Path $storagePath)) {
-	New-Item -ItemType Directory -Path "$storagePath" -Force
+$global:selectedGame = "None"
+$global:storagePath = "$env:USERPROFILE\Documents\PC Scans"
+$global:outputFile = $null
+
+#endregion
+#region UI Sections
+
+function Show-MainMenu {
+	Clear-Host
+	Write-Host ""
+	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
+	Write-Host ""
+	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
+	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
+	Write-Host ""
+	Write-HostCenter "1) Start Scan" -Color Green
+	Write-HostCenter "2) Scan Settings" -Color Green
+	Write-HostCenter "3) Open Scans Folder" -Color Green
+	Write-HostCenter "4) Exit Program" -Color Green
+	Write-Host "`n"
+	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+
+	$selection = Read-Host "`nSelect Option"
+	switch ($selection) {
+		"1" {
+			New-OutputFile
+			switch ($global:selectedGame) {
+				"None" {
+					Start-BasicScan
+				}
+				"Rainbow Six Siege" {
+					Start-R6Scan
+				}
+				Default {
+					Start-BasicScan
+				}
+			}
+		}
+		"2" {
+			Show-ScanSettingsMain
+		}
+		"3" {
+			Start-Process $global:storagePath
+		}
+		"4" {
+			Exit
+		}
+	}
 }
-$outputFile = "$storagePath\pc_check_$(Get-Date -Format 'yyyy-MM-dd-HH-mm-ss').txt"
 
-if (Test-Path $outputFile) {
-	Remove-Item $outputFile
+function Show-ScanSettingsMain {
+	Clear-Host
+	Write-Host ""
+	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
+	Write-Host ""
+	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
+	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
+	Write-Host ""
+	Write-HostCenter "1) Select Game" -Color Green
+	Write-HostCenter "2) Select Output Path" -Color Green
+	Write-HostCenter "3) Back" -Color Green
+	Write-Host "`n"
+	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+
+	$selection = Read-Host "`nSelect Option"
+	switch ($selection) {
+		"1" {
+			Show-ScanSettingsGameSelect
+		}
+		"2" {
+			$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+			$folderBrowser.Description = "Select a folder"
+			$folderBrowser.ShowNewFolderButton = $true
+			if ($folderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+				$global:storagePath = $folderBrowser.SelectedPath
+			}
+			Show-ScanSettingsMain
+		}
+		"3" {
+			Show-MainMenu
+		}
+	}
 }
 
-Add-Content -Path $outputFile -Value "========================================"
-Add-Content -Path $outputFile -Value "PC Name: $env:COMPUTERNAME"
-Add-Content -Path $outputFile -Value "User Name: $env:USERNAME"
-Add-Content -Path $outputFile -Value "`nPC Check Started: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
-Add-Content -Path $outputFile -Value "Full Internal File Scan + Hardware Scan"
-Add-Content -Path $outputFile -Value "========================================"
+function Show-ScanSettingsGameSelect {
+	Clear-Host
+	Write-Host ""
+	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
+	Write-Host ""
+	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
+	Write-Host ""
+	Write-HostCenter "1) None" -Color Green
+	Write-HostCenter "2) Rainbow Six Siege" -Color Green
+	Write-HostCenter "3) Back" -Color Green
+	Write-Host "`n"
+	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
-# === FUNCTION: Centered Write-Host
+	$selection = Read-Host "`nSelect Option"
+	switch ($selection) {
+		"1" {
+			$global:selectedGame = "None"
+		}
+		"2" {
+			$global:selectedGame = "Rainbow Six Siege"
+		}
+		"3" {
+			Show-ScanSettingsMain
+		}
+	}
+}
+
+function Show-EndScanScreen {
+	Clear-Host
+	Write-Host ""
+	Write-HostCenter "======== Scan Complete ========" -Color DarkRed
+	Write-Host ""
+	Write-HostCenter "Scan Results Written To: $global:outputFile" -Color Cyan
+	Write-Host ""
+	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+
+	Write-Host "`n"
+	Write-HostCenter "Press any key to continue..." -Color Gray
+
+	Read-Host "`n"
+}
+
+#endregion
+
+#region Utility
 function Write-HostCenter { 
 	param(
 		$Message,
@@ -66,7 +175,6 @@ function Write-HostCenter {
 	$Host.UI.RawUI.BackgroundColor = $originalBg
 }
 
-# === FUNCTION: Resize Window
 function Set-WindowSize {
 	param (
 		[Parameter(Mandatory = $true)]
@@ -94,7 +202,6 @@ function Set-WindowSize {
 	}
 }
 
-# === FUNCTION: Decode ROT13 Strings ===
 function Convert-ROT13 {
 	param (
 		[string]$InputString
@@ -114,6 +221,34 @@ function Convert-ROT13 {
 		}) -join ''
 }
 
+function New-OutputFile {
+	if (-not (Test-Path $global:storagePath)) {
+		New-Item -ItemType Directory -Path "$global:storagePath" -Force
+	}
+	$global:outputFile = "$global:storagePath\pc_check_$(Get-Date -Format 'yyyy-MM-dd-HH-mm-ss').txt"
+
+	if (Test-Path $global:outputFile) {
+		Remove-Item $global:outputFile
+	}
+
+	Add-Content -Path $global:outputFile -Value "========================================"
+	Add-Content -Path $global:outputFile -Value "PC Name: $env:COMPUTERNAME"
+	Add-Content -Path $global:outputFile -Value "User Name: $env:USERNAME"
+	Add-Content -Path $global:outputFile -Value "`nPC Check Started: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
+	Add-Content -Path $global:outputFile -Value "Full Internal File Scan + Hardware Scan"
+	Add-Content -Path $global:outputFile -Value "========================================"
+}
+function Invoke-EndScan {
+	Show-EndScanScreen
+	
+	Add-Content -Path $global:outputFile -Value "`n========================================"
+	Add-Content -Path $global:outputFile -Value "Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
+	Add-Content -Path $global:outputFile -Value "`nWritten by @imluvvr & @ScaRMR6 on X"
+	Invoke-Item -Path $global:outputFile
+}
+#endregion
+
+#region Scan Functions
 # === FUNCTION: Get Execution History from Event Logs ===
 function Get-ExecutionHistoryFromEventLogs {
 	Write-HostCenter "Scanning Windows Security Event Logs (4688)..." -Color Green -Bold $true
@@ -124,12 +259,12 @@ function Get-ExecutionHistoryFromEventLogs {
 			if ($commandLine -match "\S+\.exe") {
 				$exePath = $matches[0]
 				$timestamp = $event.TimeCreated
-				Add-Content -Path $outputFile -Value "$exePath, $timestamp"
+				Add-Content -Path $global:outputFile -Value "$exePath, $timestamp"
 			}
 		}
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to read event logs: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to read event logs: $_"
 	}
 	Write-HostCenter ">> Event log scan complete! <<`n" -Color DarkGreen
 }
@@ -142,11 +277,11 @@ function Get-ExecutablesFromPrefetch {
 		Get-ChildItem -Path $prefetchDir -Filter "*.pf" | ForEach-Object {
 			$exeName = $_.Name -replace "\.pf$", ""
 			$timestamp = $_.CreationTime
-			Add-Content -Path $outputFile -Value "$exeName, $timestamp"
+			Add-Content -Path $global:outputFile -Value "$exeName, $timestamp"
 		}
 	}
  else {
-		Add-Content -Path $outputFile -Value "Prefetch folder not found."
+		Add-Content -Path $global:outputFile -Value "Prefetch folder not found."
 	}
 	Write-HostCenter ">> Prefetch scan complete! <<`n" -Color DarkGreen
 }
@@ -159,12 +294,12 @@ function Get-ExecutablesFromMuiCache {
 		$entries = Get-ItemProperty -Path $keyPath
 		foreach ($entry in $entries.PSObject.Properties) {
 			if ($entry.Name -match "\S+\.exe") {
-				Add-Content -Path $outputFile -Value "$($entry.Name)"
+				Add-Content -Path $global:outputFile -Value "$($entry.Name)"
 			}
 		}
 	}
  else {
-		Add-Content -Path $outputFile -Value "MuiCache not found."
+		Add-Content -Path $global:outputFile -Value "MuiCache not found."
 	}
 	Write-HostCenter ">> MUI Cache scan complete! <<`n" -Color DarkGreen
 }
@@ -178,12 +313,12 @@ function Get-AppSwitched {
 		$entries = Get-ItemProperty -Path $keypath
 		foreach ($entry in $entries.PSObject.Properties) {
 			if ($entry.Name -match "\S+\.exe") {
-				Add-Content -Path $outputFile -Value "$($entry.Name)"
+				Add-Content -Path $global:outputFile -Value "$($entry.Name)"
 			}
 		}
 	}
 	else {
-		Add-Content -Path $outputFile -Value "Registry path not found: $keypath"
+		Add-Content -Path $global:outputFile -Value "Registry path not found: $keypath"
 	}
 	Write-HostCenter ">> AppSwitched scan complete! <<`n" -Color DarkGreen
 }
@@ -202,12 +337,12 @@ function Get-ExecutablesFromRegistry {
 			$entries = Get-ItemProperty -Path $key
 			foreach ($entry in $entries.PSObject.Properties) {
 				if ($entry.Value -match "\S+\.exe") {
-					Add-Content -Path $outputFile -Value "$($entry.Value)"
+					Add-Content -Path $global:outputFile -Value "$($entry.Value)"
 				}
 			}
 		}
 		else {
-			Add-Content -Path $outputFile -Value "Registry path not found: $key"
+			Add-Content -Path $global:outputFile -Value "Registry path not found: $key"
 		}
 	}
 	Write-HostCenter ">> Registry scan complete! <<`n" -Color DarkGreen
@@ -227,12 +362,12 @@ function Get-EncodedExecutablesFromRegistry {
 			foreach ($entry in $entries.PSObject.Properties) {
 				$decodedEntry = Convert-ROT13 -InputString "$($entry.Name)"
 				if ($decodedEntry -match "\S+\.exe") {
-					Add-Content -Path $outputFile -Value "$($decodedEntry)"
+					Add-Content -Path $global:outputFile -Value "$($decodedEntry)"
 				}
 			}
 		}
 		else {
-			Add-Content -Path $outputFile -Value "Registry path not found: $key"
+			Add-Content -Path $global:outputFile -Value "Registry path not found: $key"
 		}
 	}
 	Write-HostCenter ">> Encoded Registry scan complete! <<`n" -Color DarkGreen
@@ -241,24 +376,24 @@ function Get-EncodedExecutablesFromRegistry {
 # === FUNCTION: Open Network Ports ===
 function Get-OpenNetworkPorts {
 	Write-HostCenter "Scanning Open Network Ports..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== NETWORK PORT SCAN ========"
+	Add-Content -Path $global:outputFile -Value "`n======== NETWORK PORT SCAN ========"
 	try {
 		$netStats = Get-NetTCPConnection | Where-Object { $_.State -eq "Listen" }
 		foreach ($conn in $netStats) {
 			$local = ":$($conn.LocalPort)"
 			$proc = (Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue).ProcessName
-			Add-Content -Path $outputFile -Value "TCP LISTEN - $local - Process: $proc"
+			Add-Content -Path $global:outputFile -Value "TCP LISTEN - $local - Process: $proc"
 		}
 
 		$udpStats = Get-NetUDPEndpoint
 		foreach ($conn in $udpStats) {
 			$local = ":$($conn.LocalPort)"
 			$proc = (Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue).ProcessName
-			Add-Content -Path $outputFile -Value "UDP ENDPOINT - $local - Process: $proc"
+			Add-Content -Path $global:outputFile -Value "UDP ENDPOINT - $local - Process: $proc"
 		}
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to retrieve port info: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to retrieve port info: $_"
 	}
 	Write-HostCenter ">> Port scan complete! <<`n" -Color DarkGreen
 }
@@ -266,15 +401,15 @@ function Get-OpenNetworkPorts {
 # === FUNCTION: DMA-capable Devices ===
 function Get-DMADevices {
 	Write-HostCenter "Scanning Devices..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== DEVICE SCAN ========"
+	Add-Content -Path $global:outputFile -Value "`n======== DEVICE SCAN ========"
 	try {
 		$devices = Get-PnpDevice -PresentOnly | Where-Object { $_.FriendlyName -match "USB|Thunderbolt|1394|DMA" }
 		foreach ($dev in $devices) {
-			Add-Content -Path $outputFile -Value "$($dev.FriendlyName) - $($dev.Class) - $($dev.Status)"
+			Add-Content -Path $global:outputFile -Value "$($dev.FriendlyName) - $($dev.Class) - $($dev.Status)"
 		}
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to check DMA-related devices: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to check DMA-related devices: $_"
 	}
 	Write-HostCenter ">> Device scan complete! <<`n" -Color DarkGreen
 }
@@ -282,24 +417,24 @@ function Get-DMADevices {
 # === FUNCTION: PCIe Devices (like GPU) ===
 function Get-PCIeDevices {
 	Write-HostCenter "Scanning PCIe Devices..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== PCIE SCAN ========"
+	Add-Content -Path $global:outputFile -Value "`n======== PCIE SCAN ========"
 	try {
 		$pcieDevices = Get-PnpDevice -PresentOnly | Where-Object {
 			$_.InstanceId -match "^PCI\\" -and ($_.Class -match "Display|System|Net|Media|Storage")
 		}
 
 		if ($pcieDevices.Count -eq 0) {
-			Add-Content -Path $outputFile -Value "No PCIe devices detected."
+			Add-Content -Path $global:outputFile -Value "No PCIe devices detected."
 		}
 		else {
 			foreach ($device in $pcieDevices) {
 				$desc = "$($device.FriendlyName) - Class: $($device.Class) - Status: $($device.Status)"
-				Add-Content -Path $outputFile -Value $desc
+				Add-Content -Path $global:outputFile -Value $desc
 			}
 		}
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to scan PCIe devices: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to scan PCIe devices: $_"
 	}
 	Write-HostCenter ">> PCIe device scan complete! <<`n" -Color DarkGreen
 }
@@ -307,13 +442,13 @@ function Get-PCIeDevices {
 # === FUNCTION: Recently Closed Applications ===
 function Get-RecentlyClosedApps {
 	Write-HostCenter "Scanning Recently Closed Applications..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== RECENTLY CLOSED APPLICATIONS ========"
+	Add-Content -Path $global:outputFile -Value "`n======== RECENTLY CLOSED APPLICATIONS ========"
 	try {
 		$stoppedEvents = Get-WinEvent -LogName "Microsoft-Windows-WMI-Activity/Operational" -MaxEvents 200 |
 		Where-Object { $_.Id -eq 23 -and $_.Message -match "\.exe" }
 
 		if ($stoppedEvents.Count -eq 0) {
-			Add-Content -Path $outputFile -Value "No recent application close events found."
+			Add-Content -Path $global:outputFile -Value "No recent application close events found."
 		}
 		else {
 			foreach ($event in $stoppedEvents) {
@@ -321,13 +456,13 @@ function Get-RecentlyClosedApps {
 				if ($msg -match "Process\s(.+?\.exe)") {
 					$exe = $matches[1]
 					$time = $event.TimeCreated
-					Add-Content -Path $outputFile -Value "$exe closed at $time"
+					Add-Content -Path $global:outputFile -Value "$exe closed at $time"
 				}
 			}
 		}
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to read closed app data: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to read closed app data: $_"
 	}
 	Write-HostCenter ">> Recently closed app scan complete! <<`n" -Color DarkGreen
 }
@@ -335,30 +470,30 @@ function Get-RecentlyClosedApps {
 # === FUNCTION: BIOS & Motherboard Info ===
 function Get-BIOSInfo {
 	Write-HostCenter "Collecting BIOS Information..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== BIOS INFORMATION ========"
+	Add-Content -Path $global:outputFile -Value "`n======== BIOS INFORMATION ========"
 	try {
 		$bios = Get-CimInstance -ClassName Win32_BIOS
-		Add-Content -Path $outputFile -Value "BIOS Manufacturer: $($bios.Manufacturer)"
-		Add-Content -Path $outputFile -Value "BIOS Version     : $($bios.SMBIOSBIOSVersion)"
-		Add-Content -Path $outputFile -Value "BIOS Release Date: $($bios.ReleaseDate)"
+		Add-Content -Path $global:outputFile -Value "BIOS Manufacturer: $($bios.Manufacturer)"
+		Add-Content -Path $global:outputFile -Value "BIOS Version     : $($bios.SMBIOSBIOSVersion)"
+		Add-Content -Path $global:outputFile -Value "BIOS Release Date: $($bios.ReleaseDate)"
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to retrieve BIOS info: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to retrieve BIOS info: $_"
 	}
 	Write-HostCenter ">> BIOS info collected! <<`n" -Color DarkGreen
 }
 
 function Get-MotherboardInfo {
 	Write-HostCenter "Collecting Motherboard & I/O Information..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== MOTHERBOARD INFORMATION ========"
+	Add-Content -Path $global:outputFile -Value "`n======== MOTHERBOARD INFORMATION ========"
 	try {
 		$board = Get-CimInstance -ClassName Win32_BaseBoard
-		Add-Content -Path $outputFile -Value "Manufacturer : $($board.Manufacturer)"
-		Add-Content -Path $outputFile -Value "Product Name : $($board.Product)"
-		Add-Content -Path $outputFile -Value "Serial Number: $($board.SerialNumber)"
+		Add-Content -Path $global:outputFile -Value "Manufacturer : $($board.Manufacturer)"
+		Add-Content -Path $global:outputFile -Value "Product Name : $($board.Product)"
+		Add-Content -Path $global:outputFile -Value "Serial Number: $($board.SerialNumber)"
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Failed to retrieve motherboard info: $_"
+		Add-Content -Path $global:outputFile -Value "Failed to retrieve motherboard info: $_"
 	}
 	Write-HostCenter ">> Motherboard info collected! <<`n" -Color DarkGreen
 }
@@ -366,123 +501,124 @@ function Get-MotherboardInfo {
 # === FUNCTION: BIOS DMA-Related Settings (via Windows) ===
 function Get-FirmwareSecurityState {
 	Write-HostCenter "Checking Firmware Information..." -Color Green -Bold $true
-	Add-Content -Path $outputFile -Value "`n======== FIRMWARE INFORMATION ========"
+	Add-Content -Path $global:outputFile -Value "`n======== FIRMWARE INFORMATION ========"
 	try {
 		$secureBoot = Confirm-SecureBootUEFI
-		Add-Content -Path $outputFile -Value "Secure Boot: $(if ($secureBoot) { 'Enabled' } else { 'Disabled' })"
+		Add-Content -Path $global:outputFile -Value "Secure Boot: $(if ($secureBoot) { 'Enabled' } else { 'Disabled' })"
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Secure Boot: Unable to determine (BIOS mode or unsupported)"
+		Add-Content -Path $global:outputFile -Value "Secure Boot: Unable to determine (BIOS mode or unsupported)"
 	}
 
 	try {
 		$virt = Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty VirtualizationFirmwareEnabled
-		Add-Content -Path $outputFile -Value "Virtualization Technology (VT-x): $(if ($virt) { 'Enabled' } else { 'Disabled' })"
+		Add-Content -Path $global:outputFile -Value "Virtualization Technology (VT-x): $(if ($virt) { 'Enabled' } else { 'Disabled' })"
 	}
  catch {
-		Add-Content -Path $outputFile -Value "Virtualization Technology: Could not detect"
+		Add-Content -Path $global:outputFile -Value "Virtualization Technology: Could not detect"
 	}
 
 	try {
 		$tpm = Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm
 		if ($tpm) {
-			Add-Content -Path $outputFile -Value "TPM Version: $($tpm.SpecVersion)"
-			Add-Content -Path $outputFile -Value "TPM Enabled: $($tpm.IsEnabled_InitialValue)"
+			Add-Content -Path $global:outputFile -Value "TPM Version: $($tpm.SpecVersion)"
+			Add-Content -Path $global:outputFile -Value "TPM Enabled: $($tpm.IsEnabled_InitialValue)"
 		}
 		else {
-			Add-Content -Path $outputFile -Value "TPM: Not available"
+			Add-Content -Path $global:outputFile -Value "TPM: Not available"
 		}
 	}
  catch {
-		Add-Content -Path $outputFile -Value "TPM: Unable to query"
+		Add-Content -Path $global:outputFile -Value "TPM: Unable to query"
 	}
 	Write-HostCenter ">> Firmware security checks complete! <<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Extra Scans
-function Get-ExtraScans {
-	foreach ($g in $extras) {
-		switch ($g.ToString().ToLower()) {
-			"r6" {
-				$uids = @()
-				Write-Host ""
-				Write-HostCenter "Revealing all Rainbow Six Siege Accounts..." -Color Green
-				$folders = @(
-					"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\savegames",
-					"$($ENV:LOCALAPPDATA)\Ubisoft Game Launcher\spool"
-				)
-				foreach ($folder in $folders) {
-					if (Test-Path "$folder") {
-						Get-ChildItem -Path $folder | ForEach-Object {
-							$uids += $_.Name
-						}
-					}
-				}
-				$uids = $uids | Select-Object -Unique
-				Write-Host ""
-				foreach ($uid in $uids) {
-					Start-Process "https://stats.cc/siege/$uid"
-					Write-HostCenter "Found $uid" -Color DarkGreen
-				}
-				Write-Host ""
-				Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
+function Get-RainbowSixAccounts {
+	$uids = @()
+	Write-Host ""
+	Write-HostCenter "Revealing all Rainbow Six Siege Accounts..." -Color Green
+	$folders = @(
+		"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\savegames",
+		"$($ENV:LOCALAPPDATA)\Ubisoft Game Launcher\spool"
+	)
+	foreach ($folder in $folders) {
+		if (Test-Path "$folder") {
+			Get-ChildItem -Path $folder | ForEach-Object {
+				$uids += $_.Name
 			}
 		}
 	}
+	$uids = $uids | Select-Object -Unique
+	Write-Host ""
+	foreach ($uid in $uids) {
+		Start-Process "https://stats.cc/siege/$uid"
+		Write-HostCenter "Found $uid" -Color DarkGreen
+	}
+	Write-Host ""
+	Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
+}
+#endregion
+
+#region Execution Functions
+
+function Start-BaseScan {
+	Clear-Host
+	Write-Host ""
+	Write-HostCenter "Starting PC Scans..." -Color Magenta
+	Start-Sleep -Seconds 1
+	Clear-Host
+
+	Write-Host ""
+	Write-HostCenter "Starting PC scan -> Executables Data...`n" -Color Magenta
+	Add-Content -Path $global:outputFile -Value "`n======== REGISTRY & CACHE SCAN ========"
+
+	Get-ExecutablesFromMuiCache
+	Get-ExecutablesFromRegistry
+	Get-EncodedExecutablesFromRegistry
+	Get-AppSwitched
+
+	Add-Content -Path $global:outputFile -Value "`n======== PREFETCH SCAN ========"
+
+	Get-ExecutablesFromPrefetch
+
+	Add-Content -Path $global:outputFile -Value "`n======== SYSTEM EVENT SCAN ========"
+
+	Get-ExecutionHistoryFromEventLogs
+	Get-RecentlyClosedApps
+
+	Start-Sleep -Milliseconds 800
+	Clear-Host
+
+	Write-Host ""
+	Write-HostCenter "Starting Deep PC scan -> Hardware Scan`n" -Color Magenta
+
+	Get-OpenNetworkPorts
+	Get-DMADevices
+	Get-PCIeDevices
+	Get-BIOSInfo
+	Get-MotherboardInfo
+	Get-FirmwareSecurityState
+
 }
 
-# === RUN ALL CHECKS ===
-Write-Host ""
-Write-HostCenter "======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========" -Color Magenta
-Write-Host ""
-Write-HostCenter "Starting PC Scans..." -Color Magenta
-Start-Sleep -Seconds 3
-Clear-Host
+function Start-BasicScan {
+	Start-BaseScan
+	Invoke-EndScan
+}
 
-Write-Host ""
-Write-HostCenter "Starting PC scan -> Executables Data...`n" -Color Magenta
-Add-Content -Path $outputFile -Value "`n======== REGISTRY & CACHE SCAN ========"
-Get-ExecutablesFromMuiCache
-Get-ExecutablesFromRegistry
-Get-EncodedExecutablesFromRegistry
-Get-AppSwitched
+function Start-R6Scan {
+	Start-BaseScan
+	Get-RainbowSixAccounts
+	Invoke-EndScan
+}
 
-Add-Content -Path $outputFile -Value "`n======== PREFETCH SCAN ========"
-Get-ExecutablesFromPrefetch
+#endregion
 
-Add-Content -Path $outputFile -Value "`n======== SYSTEM EVENT SCAN ========"
-Get-ExecutionHistoryFromEventLogs
-Get-RecentlyClosedApps
-Start-Sleep -Milliseconds 800
-Clear-Host
-
-Write-Host ""
-Write-HostCenter "Starting Deep PC scan -> Hardware Scan`n" -Color Magenta
-Get-OpenNetworkPorts
-Get-DMADevices
-Get-PCIeDevices
-Get-BIOSInfo
-Get-MotherboardInfo
-Get-FirmwareSecurityState
-
-Add-Content -Path $outputFile -Value "`n========================================"
-Add-Content -Path $outputFile -Value "Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
-Add-Content -Path $outputFile -Value "`nWritten by @imluvvr & @ScaRMR6 on X"
-Start-Sleep -Milliseconds 800
-Clear-Host
-
-Write-Host ""
-Write-HostCenter "======== Running All Extra Checks ========" -Color Magenta
-Write-Host ""
-Get-ExtraScans
-Start-Sleep -Seconds 2
-
-Write-Host ""
-Write-HostCenter "======== OS Deep Scan Written by @imluvvr & @ScaRMR6 on X ========" -Color Magenta
-Write-Host ""
-Write-HostCenter "PC Scans Complete!" -Color Magenta
-Start-Sleep -Milliseconds 2500
-
-Clear-Host
-Invoke-Item -Path $outputFile
-Exit
+#region Run
+do {
+	Clear-Host
+	Show-MainMenu
+} while ($true)
+#endregion
