@@ -417,7 +417,7 @@ Get-ExecutablesFromPrefetch
 Add-Content -Path $outputFile -Value "`n======== SYSTEM EVENT SCAN ========"
 Get-ExecutionHistoryFromEventLogs
 Get-RecentlyClosedApps
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 800
 Clear-Host
 
 Write-Host ""
@@ -432,7 +432,7 @@ Get-FirmwareSecurityState
 Add-Content -Path $outputFile -Value "`n========================================"
 Add-Content -Path $outputFile -Value "Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')"
 Add-Content -Path $outputFile -Value "`nWritten by @imluvvr & @ScaRMR6 on X"
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 800
 Clear-Host
 
 Write-Host ""
