@@ -28,12 +28,12 @@ $global:foundFiles = @()
 
 function Show-MainMenu {
 	Clear-Host
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
 	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "1) Start Scan" -Color Green
 	Write-HostCenter "2) Scan Settings" -Color Green
 	Write-HostCenter "3) Open Scans Folder" -Color Green
@@ -64,6 +64,7 @@ function Show-MainMenu {
 			Start-Process $global:storagePath
 		}
 		"4" {
+			Show-ExitScreen
 			Exit
 		}
 	}
@@ -71,12 +72,12 @@ function Show-MainMenu {
 
 function Show-ScanSettingsMain {
 	Clear-Host
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
 	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "1) Select Game" -Color Green
 	Write-HostCenter "2) Select Output Path" -Color Green
 	Write-HostCenter "3) Back" -Color Green
@@ -105,11 +106,11 @@ function Show-ScanSettingsMain {
 
 function Show-ScanSettingsGameSelect {
 	Clear-Host
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "1) None" -Color Green
 	Write-HostCenter "2) Rainbow Six Siege" -Color Green
 	Write-HostCenter "3) Back" -Color Green
@@ -132,17 +133,29 @@ function Show-ScanSettingsGameSelect {
 
 function Show-EndScanScreen {
 	Clear-Host
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "======== Scan Complete ========" -Color DarkRed
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Scan Results Written To: $global:outputFile" -Color Cyan
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
 	Write-Host "`n"
 	Write-HostCenter "Press any key to continue..." -Color Gray
 
 	Read-Host "`n"
+}
+
+function Show-ExitScreen {
+	Clear-Host
+	Write-Host
+	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
+	Write-Host
+	Write-HostCenter "Main Developer: @imluvvr on X" -Color Cyan
+	Write-HostCenter "Hardware Info Scans: @ScaRMR6 on X" -Color Cyan
+	Write-Host
+	Write-HostCenter "======== Program Exited ========" -Color DarkRed
+	Write-Host
 }
 
 #endregion
@@ -801,7 +814,7 @@ function Get-FirmwareSecurityState {
 # === FUNCTION: Extra Scans
 function Get-RainbowSixAccounts {
 	$uids = @()
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Revealing all Rainbow Six Siege Accounts..." -Color Green
 	$global:outputLines["r6"] = @("`n======== Rainbow Six Siege Accounts ========")
 	$folders = @(
@@ -816,13 +829,13 @@ function Get-RainbowSixAccounts {
 		}
 	}
 	$uids = $uids | Select-Object -Unique
-	Write-Host ""
+	Write-Host
 	foreach ($uid in $uids) {
 		Start-Process "https://stats.cc/siege/$uid"
 		$global:outputLines["r6"] += "$uid"
 		Write-HostCenter "Found $uid" -Color DarkGreen
 	}
-	Write-Host ""
+	Write-Host
 	Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
 }
 #endregion
@@ -831,12 +844,12 @@ function Get-RainbowSixAccounts {
 
 function Start-BaseScan {
 	Clear-Host
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Starting PC Scans..." -Color Magenta
 	Start-Sleep -Seconds 1
 	Clear-Host
 
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Starting PC scan -> Executables Data...`n" -Color Magenta
 	$global:outputLines["registry"] = @("`n======== REGISTRY & CACHE SCAN ========")
 
@@ -857,7 +870,7 @@ function Start-BaseScan {
 	Start-Sleep -Milliseconds 800
 	Clear-Host
 
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Starting Deep PC scan -> Hardware Scan`n" -Color Magenta
 
 	Get-OpenNetworkPorts
@@ -868,7 +881,7 @@ function Start-BaseScan {
 	Get-FirmwareSecurityState
 
 	Clear-Host
-	Write-Host ""
+	Write-Host
 	Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
 	Write-HostCenter "Note: This Could Take A While...`n" -Color Gray
 	Get-SuspiciousFiles
