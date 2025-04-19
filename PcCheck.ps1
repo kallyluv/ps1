@@ -156,6 +156,7 @@ function Show-ExitScreen {
 	Write-Host
 	Write-HostCenter "======== Program Exited ========" -Color DarkRed
 	Write-Host
+	Start-Sleep -Seconds 4
 }
 
 #endregion
