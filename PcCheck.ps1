@@ -446,7 +446,11 @@ function Get-SuspiciousFiles {
 	Write-HostCenter "Building Filter Hash..." -Color Green
 	$words = ((Get-Content $tempFile) -split "`n") | Sort-Object Length -Descending
 	$wordSet = [System.Collections.Generic.HashSet[string]]::new()
-	$words | ForEach-Object { $null = $wordSet.Add($_) }
+	$words | ForEach-Object {
+		if ($_.Length -ge 3) { 
+			$null = $wordSet.Add($_)
+		}
+	}
 	Write-HostCenter ">> Done! <<`n" -Color Green
 
 	Write-HostCenter "Sifting Through Files..." -Color Green
@@ -465,18 +469,6 @@ function Get-SuspiciousFiles {
 		}
 
 		if ($nameOnly.Length -lt 6) {
-			continue
-		}
-		if ($nameOnly -match '[-_\d]') { 
-			continue 
-		}
-		if ($nameOnly -match "\s+") {
-			continue
-		}
-
-		$vowelCount = ($nameOnly -split '' | Where-Object { $_ -match '[aeiou]' }).Count
-		$vowelRatio = $vowelCount / $nameOnly.Length
-		if ($vowelRatio -gt 0.3 -and $vowelRatio -lt 0.7) {
 			continue
 		}
 
