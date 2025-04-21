@@ -27,6 +27,10 @@ $global:foundFiles = @()
 #region UI Sections
 
 function Show-MainMenu {
+	param (
+		[string]$ErrorMessage = $null
+	)
+
 	Clear-Host
 	Write-Host
 	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
@@ -34,6 +38,10 @@ function Show-MainMenu {
 	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
 	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
 	Write-Host
+	if ($ErrorMessage) {
+		Write-HostCenter "$ErrorMessage" -Color Red
+		Write-Host
+	}
 	Write-HostCenter "1) Start Scan" -Color Green
 	Write-HostCenter "2) Scan Settings" -Color Green
 	Write-HostCenter "3) Open Scans Folder" -Color Green
@@ -41,7 +49,7 @@ function Show-MainMenu {
 	Write-Host "`n"
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
-	$selection = Read-Host "`nSelect Option"
+	$selection = Wait-ForInput
 	switch ($selection) {
 		"1" {
 			New-OutputFile
@@ -67,10 +75,17 @@ function Show-MainMenu {
 			Show-ExitScreen
 			Exit
 		}
+		Default {
+			Show-MainMenu -ErrorMessage "That is not a valid option!"
+		}
 	}
 }
 
 function Show-ScanSettingsMain {
+	param (
+		[string]$ErrorMessage = $null
+	)
+
 	Clear-Host
 	Write-Host
 	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
@@ -78,13 +93,17 @@ function Show-ScanSettingsMain {
 	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
 	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
 	Write-Host
+	if ($ErrorMessage) {
+		Write-HostCenter "$ErrorMessage" -Color Red
+		Write-Host
+	}
 	Write-HostCenter "1) Select Game" -Color Green
 	Write-HostCenter "2) Select Output Path" -Color Green
 	Write-HostCenter "3) Back" -Color Green
 	Write-Host "`n"
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
-	$selection = Read-Host "`nSelect Option"
+	$selection = Wait-ForInput
 	switch ($selection) {
 		"1" {
 			Show-ScanSettingsGameSelect
@@ -101,23 +120,34 @@ function Show-ScanSettingsMain {
 		"3" {
 			Show-MainMenu
 		}
+		Default {
+			Show-ScanSettingsMain -ErrorMessage "That is not a valid option!"
+		}
 	}
 }
 
 function Show-ScanSettingsGameSelect {
+	param (
+		[string]$ErrorMessage = $null
+	)
+
 	Clear-Host
 	Write-Host
 	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
 	Write-Host
 	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
 	Write-Host
+	if ($ErrorMessage) {
+		Write-HostCenter "$ErrorMessage" -Color Red
+		Write-Host
+	}
 	Write-HostCenter "1) None" -Color Green
 	Write-HostCenter "2) Rainbow Six Siege" -Color Green
 	Write-HostCenter "3) Back" -Color Green
 	Write-Host "`n"
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
-	$selection = Read-Host "`nSelect Option"
+	$selection = Wait-ForInput
 	switch ($selection) {
 		"1" {
 			$global:selectedGame = "None"
@@ -127,6 +157,9 @@ function Show-ScanSettingsGameSelect {
 		}
 		"3" {
 			Show-ScanSettingsMain
+		}
+		Default {
+			Show-ScanSettingsGameSelect -ErrorMessage "That is not a valid option!"
 		}
 	}
 }
@@ -143,7 +176,7 @@ function Show-EndScanScreen {
 	Write-Host "`n"
 	Write-HostCenter "Press any key to continue..." -Color Gray
 
-	Read-Host "`n"
+	Wait-ForInput
 }
 
 function Show-ExitScreen {
@@ -157,6 +190,7 @@ function Show-ExitScreen {
 	Write-HostCenter "======== Program Exited ========" -Color DarkRed
 	Write-Host
 	Start-Sleep -Seconds 4
+	Clear-Host
 }
 
 #endregion
@@ -268,9 +302,8 @@ function New-OutputFile {
 		"========================================"
 	)
 }
-function Invoke-EndScan {
-	Show-EndScanScreen
-	
+
+function Write-OutputFile {
 	$global:outputLines["footer"] = @(
 		"`n========================================",
 		"Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')",
@@ -332,6 +365,11 @@ function Invoke-EndScan {
 	foreach ($line in $global:outputLines["footer"]) {
 		Add-Content -Path $global:outputFile -Value $line
 	}
+}
+
+function Invoke-EndScan {
+	Write-OutputFile
+	Show-EndScanScreen
 
 	Invoke-Item -Path $global:outputFile
 }
@@ -508,6 +546,19 @@ function Get-SuspiciousFiles {
 		Remove-Item $tempFile -Force
 		Write-HostCenter ">> Done! <<`n" -Color Green
 	}
+}
+
+function Wait-ForInput {
+	param (
+		[string]$Message = $null,
+		[ConsoleColor]$TextColor = "White"
+	)
+
+	if ($Message) {
+		Write-HostCenter $Message -Color $TextColor
+	}
+	$read = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+	return ($read.Character)
 }
 #endregion
 
