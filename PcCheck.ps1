@@ -22,6 +22,8 @@ $global:storagePath = "$env:USERPROFILE\Documents\PC Scans"
 $global:outputFile = $null
 $global:outputLines = @{}
 $global:foundFiles = @()
+$global:sqlite3 = $null
+$global:sqlite3dir = $null
 
 #endregion
 #region UI Sections
@@ -196,6 +198,10 @@ function Show-ExitScreen {
 #endregion
 
 #region Utility
+function Clear-CurrentLine {
+	Write-Host ("`r" + (" " * ([console]::WindowWidth - 1)) + "`r") -NoNewline
+}
+
 function Write-HostCenter { 
 	param(
 		[switch]$Bold,
@@ -334,6 +340,10 @@ function Write-OutputFile {
 		Add-Content -Path $global:outputFile -Value $line
 	}
 
+	foreach ($line in $global:outputLines["browser"]) {
+		Add-Content -Path $global:outputFile -Value $line
+	}
+
 	foreach ($line in $global:outputLines["sys"]) {
 		Add-Content -Path $global:outputFile -Value $line
 	}
@@ -394,7 +404,8 @@ function Show-CustomProgress {
 		[int]$current,
 		[int]$total,
 		[string]$prefix = "",
-		[int]$barLength = 40
+		[int]$barLength = 40,
+		[System.ConsoleColor]$Color = "White"
 	)
 
 	if ($total -eq 0) { $total = 1 } 
@@ -408,8 +419,8 @@ function Show-CustomProgress {
 	$bar = ($fillChar * $filledLength).PadRight($barLength, $emptyChar[0])
 	$line = "$prefix [$bar] $percent%"
 
-	Write-Host "`r" -NoNewline
-	Write-HostCenter "$line" -NoNewline
+	Clear-CurrentLine
+	Write-HostCenter "$line" -Color $Color -NoNewline
 }
 
 function Test-ContainsValidWord {
@@ -477,8 +488,7 @@ function Get-SuspiciousFiles {
 	$fileStream.Close()
 	$stream.Close()
 	$res.Close()
-	Write-Host ("`r" + (" " * ([console]::WindowWidth - 1)) + "`r") -NoNewline
-	Write-Host "`r" -NoNewline
+	Clear-CurrentLine
 	Write-HostCenter ">> Dictionary Downloaded <<`n`n" -Color Green -NoNewline
 
 	Write-HostCenter "Building Filter Hash..." -Color Green
@@ -559,6 +569,57 @@ function Wait-ForInput {
 	}
 	$read = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 	return ($read.Character)
+}
+
+function Install-SQLite3 {
+	$global:sqlite3dir = "$env:TEMP\sqlite_temp"
+	Join-Path $global:sqlite3dir "sqlite3.exe"
+	New-Item -ItemType Directory -Force -Path $global:sqlite3dir | Out-Null
+
+	$sqliteUrl = "https://www.sqlite.org/2025/sqlite-tools-win-x64-3490100.zip"
+	$zipPath = Join-Path $global:sqlite3dir "sqlite.zip"
+
+	$req = [System.Net.HttpWebRequest]::Create($sqliteUrl)
+	$res = $req.GetResponse()
+	$stream = $res.GetResponseStream()
+	$totalBytes = $res.ContentLength
+	$buffer = New-Object byte[] 8192
+	$bytesRead = 0
+
+	$fileStream = [System.IO.File]::Create($zipPath)
+
+	if (-not $fileStream) {
+		Write-HostCenter "Failed to create file stream for $zipPath" -Color DarkRed -Background Red
+	}
+
+	do {
+		$read = $stream.Read($buffer, 0, $buffer.Length)
+		if ($read -gt 0) {
+			$fileStream.Write($buffer, 0, $read)
+			$bytesRead += $read
+			Show-CustomProgress -current $bytesRead -total $totalBytes -prefix "Downloading SQLite3..."
+		}
+	} while ($read -gt 0)
+
+	$fileStream.Close()
+	$stream.Close()
+	$res.Close()
+
+
+	Add-Type -AssemblyName System.IO.Compression.FileSystem
+	[System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $global:sqlite3dir)
+
+	$sqliteExePath = Get-ChildItem -Recurse -Path $global:sqlite3dir -Filter "sqlite3.exe" | Select-Object -First 1
+	Clear-CurrentLine
+	if (-not $sqliteExePath) {
+		Write-HostCenter "Failed to install SQLite3... Skipping Browser Downloads" -Color Red -NoNewline
+		exit 1
+	}
+	$global:sqlite3 = $sqliteExePath.FullName
+}
+
+function Invoke-SQLite3Cleanup {
+	Remove-Item -Path $global:sqlite3dir -Recurse -Force
 }
 #endregion
 
@@ -855,7 +916,74 @@ function Get-FirmwareSecurityState {
 	Write-HostCenter ">> Firmware security checks complete! <<`n" -Color DarkGreen
 }
 
-# === FUNCTION: Extra Scans
+# === FUNCTION: Fetch Browser Download History
+function Get-BrowserDownloadHistory {
+	if (-not $global:sqlite3) { Install-SQLite3 }
+	if (-not $global:sqlite3) {
+		Write-HostCenter ">> Failed to Index Browser Download History <<`n`n" -Color Red -NoNewline
+		return $null
+	}
+
+	$browserPaths = @{
+		"Chrome"  = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\History"
+		"Edge"    = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\History"
+		"Brave"   = "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\History"
+		"Opera"   = "$env:APPDATA\Opera Software\Opera Stable\History"
+		"Firefox" = "$env:APPDATA\Mozilla\Firefox\Profiles"
+	}
+
+	$global:outputLines["browser"] = @("`n======== BROWSER DOWNLOADS ========")
+
+	foreach ($browser in $browserPaths.Keys) {
+		$path = $browserPaths[$browser]
+
+		if ($browser -eq "Firefox") {
+			if (Test-Path $path) {
+				Write-HostCenter "> Firefox Browser Support Coming Soon <" -Color Yellow
+			}
+		}
+		else {
+			if (Test-Path $path) {
+				Write-HostCenter "Found $browser, indexing..." -Color Green -NoNewline
+				$tempCopy = Join-Path $global:sqlite3dir "$browser-Downloads.db"
+				Copy-Item $path $tempCopy -Force
+
+				$query = "SELECT target_path, datetime(start_time/1000000 - 11644473600, 'unixepoch') AS download_date, referrer FROM downloads"
+
+				$cmd = "$global:sqlite3 `"$tempCopy`" `"$query`""
+				$output = Invoke-Expression $cmd
+
+				$progress = 0
+				Clear-CurrentLine
+
+				foreach ($line in $output) {
+					Show-CustomProgress -current $progress -total ($output.Count) -prefix "Indexing $browser..." -Color Green
+					$progress += 1
+					if ($line -match "(.+)\|(.+)\|(.+)") {
+						$result = [PSCustomObject]@{
+							Browser      = $browser
+							FilePath     = $matches[1].Trim()
+							DownloadDate = $matches[2].Trim()
+							URL          = $matches[3].Trim()
+						}
+						$global:outputLines["browser"] += "$($result.FilePath), $($result.URL), $($result.DownloadDate)"
+						$global:foundFiles += $result.FilePath
+					}
+				}
+				Clear-CurrentLine
+				Write-HostCenter "> Indexed $browser <`n" -Color Green -NoNewline
+
+				Remove-Item $tempCopy -Force
+			}
+		}
+	}
+	Clear-CurrentLine
+	Write-Host
+	Write-HostCenter ">> Indexed Browser Download History <<`n`n" -Color Green -NoNewline
+	Invoke-SQLite3Cleanup
+}
+
+# === FUNCTION: Rainbow Six Siege
 function Get-RainbowSixAccounts {
 	$uids = @()
 	Write-Host
@@ -923,6 +1051,17 @@ function Start-BaseScan {
 	Get-BIOSInfo
 	Get-MotherboardInfo
 	Get-FirmwareSecurityState
+	
+	Start-Sleep -Milliseconds 800
+	Clear-Host
+
+	Write-Host
+	Write-HostCenter "Fetching Browser Download History..." -Color Green -Bold
+	Write-HostCenter "Note: This Could Take A While...`n" -Color Gray
+	Get-BrowserDownloadHistory
+	
+	Start-Sleep -Milliseconds 800
+	Clear-Host
 
 	Clear-Host
 	Write-Host
