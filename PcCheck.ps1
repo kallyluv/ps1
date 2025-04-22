@@ -573,7 +573,6 @@ function Wait-ForInput {
 
 function Install-SQLite3 {
 	$global:sqlite3dir = "$env:TEMP\sqlite_temp"
-	Join-Path $global:sqlite3dir "sqlite3.exe"
 	New-Item -ItemType Directory -Force -Path $global:sqlite3dir | Out-Null
 
 	$sqliteUrl = "https://www.sqlite.org/2025/sqlite-tools-win-x64-3490100.zip"
@@ -605,7 +604,6 @@ function Install-SQLite3 {
 	$stream.Close()
 	$res.Close()
 
-
 	Add-Type -AssemblyName System.IO.Compression.FileSystem
 	[System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $global:sqlite3dir)
 
@@ -616,6 +614,7 @@ function Install-SQLite3 {
 		exit 1
 	}
 	$global:sqlite3 = $sqliteExePath.FullName
+	Remove-Item -Path $zipPath -Force
 }
 
 function Invoke-SQLite3Cleanup {
