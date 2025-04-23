@@ -1170,6 +1170,7 @@ function Get-RainbowSixData {
 	}
 	Write-Host
 	Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
+	Start-Sleep -Milliseconds 800
 }
 
 # === FUNCTION: Counter Strike
@@ -1223,6 +1224,7 @@ function Get-CounterStrikeData {
 	}
 	Write-Host
 	Write-HostCenter ">> Counter Strike Accounts Revealed! <<`n" -Color DarkGreen
+	Start-Sleep -Milliseconds 800
 }
 
 # === FUNCTION: Apex Legends
