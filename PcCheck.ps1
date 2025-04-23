@@ -71,9 +71,9 @@ function Show-MainMenu {
 	Write-HostCenter "Esc) Exit Program" -Color DarkGreen
 	Write-Host "`n"
 	if ($global:gameSupport.Testing.Contains($global:selectedGame)) {
-		Write-HostCenter "- $global:selectedGame Support is in Testing -" -Color DarkYellow
+		Write-HostCenter "- $global:selectedGame Support is in Testing -" -Color Yellow
 		if ($global:gameSupport.Soon.Contains($global:selectedGame)) {
-			Write-HostCenter "- Full Support Coming Soon... -" -Color DarkYellow
+			Write-HostCenter "- Full Support Coming Soon... -" -Color Yellow
 		}
 		Write-Host "`n"
 	}
@@ -351,11 +351,11 @@ function Write-SelectedGame {
 		}
 		($global:gameSupport.Testing.Contains($global:selectedGame)) {
 			if (-not $HideType) {
-				Write-HostCenter "Game Selected: $global:selectedGame (Testing)" -Color DarkYellow -NoNewline
+				Write-HostCenter "Game Selected: $global:selectedGame (Testing)" -Color Yellow -NoNewline
 				$extraBuffer += (" (Testing)".Length)
 			}
 			else {
-				Write-HostCenter "Game Selected: $global:selectedGame" -Color DarkYellow -NoNewline
+				Write-HostCenter "Game Selected: $global:selectedGame" -Color Yellow -NoNewline
 			}
 		}
 		($global:gameSupport.Minimal.Contains($global:selectedGame)) {
