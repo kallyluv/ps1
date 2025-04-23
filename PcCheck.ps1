@@ -26,10 +26,10 @@ $global:sqlite3 = $null
 $global:sqlite3dir = $null
 $global:gameSupport = [PSCustomObject]@{
 	Full    = @(
-		"Rainbow Six Siege"
+		"Rainbow Six Siege",
+		"Counter Strike"
 	)
 	Testing = @(
-		"Counter Strike"
 	)
 	Minimal = @(
 		"Valorant",
@@ -40,8 +40,6 @@ $global:gameSupport = [PSCustomObject]@{
 		"Apex Legends"
 	)
 	Soon    = @(
-		"Counter Strike",
-		"Apex Legends"
 	)
 }
 
