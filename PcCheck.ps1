@@ -1,7 +1,6 @@
 #region PRELOAD
 Clear-Host
 $ProgressPreference = 'SilentlyContinue'
-Add-Type -AssemblyName System.Windows.Forms
 function Test-Administrator {
 	$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 	$principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
@@ -15,6 +14,7 @@ if (-not (Test-Administrator)) {
 	exit
 }
 
+Add-Type -AssemblyName System.Windows.Forms
 #region Global Variables
 
 $global:selectedGame = "None"
@@ -24,6 +24,26 @@ $global:outputLines = @{}
 $global:foundFiles = @()
 $global:sqlite3 = $null
 $global:sqlite3dir = $null
+$global:gameSupport = [PSCustomObject]@{
+	Full    = @(
+		"Rainbow Six Siege"
+	)
+	Testing = @(
+		"Counter Strike"
+	)
+	Minimal = @(
+		"Valorant",
+		"Fortnite", 
+		"Call of Duty: Black Ops 6", 
+		"FiveM", 
+		"Escape from Tarkov", 
+		"Apex Legends"
+	)
+	Soon    = @(
+		"Counter Strike",
+		"Apex Legends"
+	)
+}
 
 #endregion
 #region UI Sections
@@ -37,48 +57,89 @@ function Show-MainMenu {
 	Write-Host
 	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
 	Write-Host
-	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
-	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
+	Write-SelectedGame -HideType
+	Write-HostCenter "Output Path: $global:storagePath" -Color DarkCyan
 	Write-Host
 	if ($ErrorMessage) {
 		Write-HostCenter "$ErrorMessage" -Color Red
 		Write-Host
 	}
-	Write-HostCenter "1) Start Scan" -Color Green
-	Write-HostCenter "2) Scan Settings" -Color Green
-	Write-HostCenter "3) Open Scans Folder" -Color Green
-	Write-HostCenter "4) Exit Program" -Color Green
+	Write-HostCenter "1) Start Scan" -Color DarkGreen
+	Write-HostCenter "2) Scan Settings" -Color DarkGreen
+	Write-HostCenter "3) Open Scans Folder" -Color DarkGreen
+	Write-Host
+	Write-HostCenter "Esc) Exit Program" -Color DarkGreen
 	Write-Host "`n"
+	if ($global:gameSupport.Testing.Contains($global:selectedGame)) {
+		Write-HostCenter "- $global:selectedGame Support is in Testing -" -Color DarkYellow
+		if ($global:gameSupport.Soon.Contains($global:selectedGame)) {
+			Write-HostCenter "- Full Support Coming Soon... -" -Color DarkYellow
+		}
+		Write-Host "`n"
+	}
+	elseif ($global:gameSupport.Minimal.Contains($global:selectedGame)) {
+		Write-HostCenter "- Support is Minimal for $global:selectedGame -" -Color Red
+		Write-HostCenter "- Selecting it will result in little to no differences in Scan Results -" -Color Red
+		Write-Host "`n"
+	}
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
-		"1" {
+		49 {
 			New-OutputFile
 			switch ($global:selectedGame) {
 				"None" {
-					Start-BasicScan
-				}
-				"Rainbow Six Siege" {
-					Start-R6Scan
+					if (Show-ConfirmNoGameScan) { Start-BasicScan }
 				}
 				Default {
-					Start-BasicScan
+					Start-GameScan
 				}
 			}
 		}
-		"2" {
+		50 {
 			Show-ScanSettingsMain
 		}
-		"3" {
+		51 {
 			Start-Process $global:storagePath
 		}
-		"4" {
+		27 {
 			Show-ExitScreen
 			Exit
 		}
 		Default {
 			Show-MainMenu -ErrorMessage "That is not a valid option!"
+		}
+	}
+}
+
+function Show-ConfirmNoGameScan {
+	param (
+		[string]$ErrorMessage = $null
+	)
+
+	Clear-Host
+	Write-Host
+	Write-HostCenter "======== Confirmation Prompt ========" -Color DarkRed
+	Write-Host
+	Write-HostCenter "You have not selected a game!" -Color DarkCyan
+	Write-HostCenter "Are you sure you want to start the scan?" -Color DarkCyan
+	Write-Host
+	Write-HostCenter "1) Yes" -Color DarkGreen
+	Write-HostCenter "2) No " -Color DarkGreen
+	Write-Host "`n"
+	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+
+	$selection = Wait-ForInput
+	switch ($selection) {
+		49 {
+			return $true
+		}
+		50 {
+			return $false
+		}
+		Default {
+			Show-ConfirmNoGameScan -ErrorMessage "That is not a valid option!"
 		}
 	}
 }
@@ -92,25 +153,24 @@ function Show-ScanSettingsMain {
 	Write-Host
 	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
 	Write-Host
-	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
-	Write-HostCenter "Output Path: $global:storagePath" -Color Cyan
+	Write-SelectedGame
+	Write-HostCenter "Output Path: $global:storagePath" -Color DarkCyan
 	Write-Host
 	if ($ErrorMessage) {
 		Write-HostCenter "$ErrorMessage" -Color Red
 		Write-Host
 	}
-	Write-HostCenter "1) Select Game" -Color Green
-	Write-HostCenter "2) Select Output Path" -Color Green
-	Write-HostCenter "3) Back" -Color Green
+	Write-HostCenter "1) Select Game" -Color DarkGreen
+	Write-HostCenter "2) Select Output Path" -Color DarkGreen
+	Write-Host
+	Write-HostCenter "Esc) Back" -Color DarkGreen
 	Write-Host "`n"
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
-		"1" {
-			Show-ScanSettingsGameSelect
-		}
-		"2" {
+		49	{ Show-ScanSettingsGameSelect }
+		50	{
 			$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
 			$folderBrowser.Description = "Select a folder"
 			$folderBrowser.ShowNewFolderButton = $true
@@ -119,9 +179,7 @@ function Show-ScanSettingsMain {
 			}
 			Show-ScanSettingsMain
 		}
-		"3" {
-			Show-MainMenu
-		}
+		27	{ Show-MainMenu }
 		Default {
 			Show-ScanSettingsMain -ErrorMessage "That is not a valid option!"
 		}
@@ -137,33 +195,43 @@ function Show-ScanSettingsGameSelect {
 	Write-Host
 	Write-HostCenter "======== Scan Settings ========" -Color DarkRed
 	Write-Host
-	Write-HostCenter "Game Selected: $global:selectedGame" -Color Cyan
+	Write-SelectedGame
 	Write-Host
 	if ($ErrorMessage) {
 		Write-HostCenter "$ErrorMessage" -Color Red
 		Write-Host
 	}
-	Write-HostCenter "1) None" -Color Green
-	Write-HostCenter "2) Rainbow Six Siege" -Color Green
-	Write-HostCenter "3) Back" -Color Green
+	Write-HostCenter "1) Rainbow Six Siege" -Color DarkGreen
+	Write-HostCenter "2) Counter Strike" -Color DarkGreen
+	Write-HostCenter "3) Call of Duty: Black Ops 6" -Color DarkGreen
+	Write-HostCenter "4) Fortnite" -Color DarkGreen
+	Write-HostCenter "5) FiveM" -Color DarkGreen
+	Write-HostCenter "6) Escape from Tarkov" -Color DarkGreen
+	Write-HostCenter "7) Marvel Rivals" -Color DarkGreen
+	Write-HostCenter "8) Valorant" -Color DarkGreen
+	Write-HostCenter "9) Apex Legends" -Color DarkGreen
+	Write-HostCenter "0) None" -Color DarkGreen
+	Write-Host
+	Write-HostCenter "Esc) Back" -Color DarkGreen
 	Write-Host "`n"
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
-		"1" {
-			$global:selectedGame = "None"
-		}
-		"2" {
-			$global:selectedGame = "Rainbow Six Siege"
-		}
-		"3" {
-			Show-ScanSettingsMain
-		}
-		Default {
-			Show-ScanSettingsGameSelect -ErrorMessage "That is not a valid option!"
-		}
+		48	{ $global:selectedGame = "None" }
+		49	{ $global:selectedGame = "Rainbow Six Siege" }
+		50	{ $global:selectedGame = "Counter Strike" }
+		51	{ $global:selectedGame = "Call of Duty: Black Ops 6" }
+		52	{ $global:selectedGame = "Fortnite" }
+		53	{ $global:selectedGame = "FiveM" }
+		54	{ $global:selectedGame = "Escape from Tarkov" }
+		55	{ $global:selectedGame = "Marvel Rivals" }
+		56	{ $global:selectedGame = "Valorant" }
+		57	{ $global:selectedGame = "Apex Legends" }
+		27	{ Show-ScanSettingsMain }
+		Default	{ Show-ScanSettingsGameSelect -ErrorMessage "That is not a valid option!" }
 	}
+	Show-ScanSettingsMain
 }
 
 function Show-EndScanScreen {
@@ -171,12 +239,12 @@ function Show-EndScanScreen {
 	Write-Host
 	Write-HostCenter "======== Scan Complete ========" -Color DarkRed
 	Write-Host
-	Write-HostCenter "Scan Results Written To: $global:outputFile" -Color Cyan
+	Write-HostCenter "Scan Results Written To: $global:outputFile" -Color DarkCyan
 	Write-Host
 	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
 
 	Write-Host "`n"
-	Write-HostCenter "Press any key to continue..." -Color Gray
+	Write-HostCenter "Press any key to continue..." -Color DarkGray
 
 	Wait-ForInput
 }
@@ -186,8 +254,8 @@ function Show-ExitScreen {
 	Write-Host
 	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
 	Write-Host
-	Write-HostCenter "Main Developer: @imluvvr on X" -Color Cyan
-	Write-HostCenter "Hardware Info Scans: @ScaRMR6 on X" -Color Cyan
+	Write-HostCenter "Main Developer: @imluvvr on X" -Color DarkCyan
+	Write-HostCenter "Hardware Info Scans: @ScaRMR6 on X" -Color DarkCyan
 	Write-Host
 	Write-HostCenter "======== Program Exited ========" -Color DarkRed
 	Write-Host
@@ -208,6 +276,8 @@ function Write-HostCenter {
 		[switch]$NoNewline,
 		$Message,
 
+		[int]$Buffer = 0,
+
 		[ConsoleColor]$Color = "White",
 		[ConsoleColor]$Background = ($Host.UI.RawUI.BackgroundColor)
 
@@ -224,18 +294,18 @@ function Write-HostCenter {
 		$boldOn = "${esc}[1m"
 		$reset = "${esc}[0m"
 		if ($NoNewline) {
-			Write-Host "$boldOn$("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor($Message.Length / 2)))), $Message)$reset" -NoNewline
+			Write-Host "$boldOn$("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor(($Message.Length + $Buffer) / 2)))), $Message)$reset" -NoNewline
 		}
 		else {
-			Write-Host "$boldOn$("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor($Message.Length / 2)))), $Message)$reset" 
+			Write-Host "$boldOn$("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor(($Message.Length + $Buffer) / 2)))), $Message)$reset" 
 		}
 	}
 	else {
 		if ($NoNewline) {
-			Write-Host ("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor($Message.Length / 2)))), $Message) -NoNewline
+			Write-Host ("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor(($Message.Length + $Buffer) / 2)))), $Message) -NoNewline
 		}
 		else {
-			Write-Host ("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor($Message.Length / 2)))), $Message)
+			Write-Host ("{0}{1}" -f (' ' * (([Math]::Max(0, $Host.UI.RawUI.BufferSize.Width / 2) - [Math]::Floor(($Message.Length + $Buffer) / 2)))), $Message)
 		}
 	}
 	$Host.UI.RawUI.ForegroundColor = $originalFg
@@ -267,6 +337,41 @@ function Set-WindowSize {
 	}
 	catch {
 	}
+}
+
+function Write-SelectedGame {
+	param (
+		[switch]$HideType
+	)
+
+	$extraBuffer = 0
+	switch ($true) {
+		($global:gameSupport.Full.Contains($global:selectedGame)) {
+			Write-HostCenter "Game Selected: $global:selectedGame" -Color Green -NoNewline
+		}
+		($global:gameSupport.Testing.Contains($global:selectedGame)) {
+			if (-not $HideType) {
+				Write-HostCenter "Game Selected: $global:selectedGame (Testing)" -Color DarkYellow -NoNewline
+				$extraBuffer += (" (Testing)".Length)
+			}
+			else {
+				Write-HostCenter "Game Selected: $global:selectedGame" -Color DarkYellow -NoNewline
+			}
+		}
+		($global:gameSupport.Minimal.Contains($global:selectedGame)) {
+			if (-not $HideType) {
+				Write-HostCenter "Game Selected: $global:selectedGame (Minimal)" -Color Red -NoNewline
+				$extraBuffer += (" (Minimal)".Length)
+			}
+			else {
+				Write-HostCenter "Game Selected: $global:selectedGame" -Color Red -NoNewline
+			}
+		}
+		Default	{ Write-HostCenter "Game Selected: $global:selectedGame" -Color DarkCyan -NoNewline }
+	}
+	Write-Host "`r" -NoNewline
+	if ($global:selectedGame.Length -le 7) { $extraBuffer += 1 }
+	Write-HostCenter "Game Selected:" -Color DarkCyan -Buffer ($global:selectedGame.Length + [Math]::Floor($global:selectedGame.Length / 15) + $extraBuffer)
 }
 
 function Convert-ROT13 {
@@ -322,6 +427,12 @@ function Write-OutputFile {
 
 	if ($global:outputLines.ContainsKey("r6")) {
 		foreach ($line in $global:outputLines["r6"]) {
+			Add-Content -Path $global:outputFile -Value $line
+		}
+	}
+
+	if ($global:outputLines.ContainsKey("cs")) {
+		foreach ($line in $global:outputLines["cs"]) {
 			Add-Content -Path $global:outputFile -Value $line
 		}
 	}
@@ -448,7 +559,7 @@ function Get-SuspiciousFiles {
 	)
 	$falsePositives = @{}
 	$adict = @(
-		"klar", "lethal", "dma", "bun", "demoncore", "crusader", "client"
+		"loader", "dma", "client", "cheat", "launcher", "ring1", "klar", "lethal", "cheatarmy"
 	)
 	$alwaysFlag = @{}
 	foreach ($entry in $fdict) {
@@ -456,6 +567,53 @@ function Get-SuspiciousFiles {
 	}
 	foreach ($entry in $adict) {
 		$alwaysFlag[$entry.ToLower()] = $true
+	}
+	switch ($global:selectedGame) {
+		"Rainbow Six Siege" {
+			foreach ($entry in @("bun", "demoncore", "crusader", "tomware", "hydro", "goldcore", "mojojojo")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Counter Strike" {
+			foreach ($entry in @("predator", "plague")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Call of Duty: Black Ops 6" {
+			foreach ($entry in @("octave", "meta", "zen")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Fortnite" {
+			foreach ($entry in @("blurred", "hyper", "dope")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"FiveM" {
+			foreach ($entry in @("hx")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Escape from Tarkov" {
+			foreach ($entry in @("eft")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Marvel Rivals" {
+			foreach ($entry in @("infinity", "predator")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Valorant" {
+			foreach ($entry in @("sky")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
+		"Apex Legends" {
+			foreach ($entry in @("kuno")) {
+				$alwaysFlag[$entry.ToLower()] = $true
+			}
+		}
 	}
 
 	Write-HostCenter "Downloading Remote Dictionary..." -Color Green
@@ -568,7 +726,7 @@ function Wait-ForInput {
 		Write-HostCenter $Message -Color $TextColor
 	}
 	$read = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-	return ($read.Character)
+	return ($read.VirtualKeyCode)
 }
 
 function Install-SQLite3 {
@@ -984,7 +1142,7 @@ function Get-BrowserDownloadHistory {
 }
 
 # === FUNCTION: Rainbow Six Siege
-function Get-RainbowSixAccounts {
+function Get-RainbowSixData {
 	$uids = @()
 	Write-Host
 	Write-HostCenter "Revealing all Rainbow Six Siege Accounts..." -Color Green
@@ -1007,8 +1165,69 @@ function Get-RainbowSixAccounts {
 		$global:outputLines["r6"] += "$uid"
 		Write-HostCenter "Found $uid" -Color DarkGreen
 	}
+	if ($uids.Length -eq 0) {
+		$global:outputLines["r6"] += "No Rainbow Six Accounts Found!"
+	}
 	Write-Host
 	Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
+}
+
+# === FUNCTION: Counter Strike
+function Get-CounterStrikeData {
+	Write-Host
+	Write-HostCenter "Revealing all Counter Strike Accounts..." -Color Green
+	$global:outputLines["cs"] = @("`n======== Counter Strike Accounts ========")
+	$commonSteamPath = "C:\Program Files (x86)\Steam\userdata"
+	$userdataPath = $null
+	if (-not (Test-Path $commonSteamPath)) {
+		Write-HostCenter "Steam userdata out of place, scanning system for Steam userdata..." -Color Green
+		$drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 0 }
+    
+		foreach ($drive in $drives) {
+			Write-Host "Scanning drive `"$($drive.Name):\`" for Steam userdata folder..."
+			try {
+				$searchMatches = Get-ChildItem -Path "$($drive.Name):\" -Directory -Recurse -ErrorAction SilentlyContinue |
+				Where-Object { $_.Name -eq "userdata" -and $_.Parent.Name -eq "Steam" }
+
+				foreach ($match in $searchMatches) {
+					Write-HostCenter "Found userdata folder: $($match.FullName)" -Color Green
+					$userdataPath = $match.FullName
+					break
+				}
+			}
+			catch { $null }
+			if ($userdataPath) { break }
+		}
+
+		if (-not $userdataPath) {
+			Write-HostCenter "Steam userdata not found on any drive." -Color Red
+			Write-HostCenter "Skipping Counter Strike Scan..." -Color Green
+			return
+		}
+	}
+	else { $userdataPath = $commonSteamPath }
+
+	$found = 0
+
+	Write-Host
+	Get-ChildItem -Path $userdataPath | ForEach-Object {
+		if (Test-Path "$userdataPath\$($_.Name)\730") {
+			$found++
+			Write-HostCenter "Found $($_.Name)" -Color Green
+			$global:outputLines["cs"] += "$($_.Name)"
+			Start-Process "https://tracker.gg/cs2/profile/steam/$($_.Name)"
+		}
+	}
+	if ($found -eq 0) {
+		$global:outputLines["cs"] += "No CS2 accounts found!"
+	}
+	Write-Host
+	Write-HostCenter ">> Counter Strike Accounts Revealed! <<`n" -Color DarkGreen
+}
+
+# === FUNCTION: Apex Legends
+function Get-ApexLegendsData {
+
 }
 #endregion
 
@@ -1057,7 +1276,7 @@ function Start-BaseScan {
 
 	Write-Host
 	Write-HostCenter "Fetching Browser Download History..." -Color Green -Bold
-	Write-HostCenter "Note: This Could Take A While...`n" -Color Gray
+	Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
 	Get-BrowserDownloadHistory
 	
 	Start-Sleep -Milliseconds 800
@@ -1066,7 +1285,7 @@ function Start-BaseScan {
 	Clear-Host
 	Write-Host
 	Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
-	Write-HostCenter "Note: This Could Take A While...`n" -Color Gray
+	Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
 	Get-SuspiciousFiles
 
 	Start-Sleep -Milliseconds 800
@@ -1077,9 +1296,19 @@ function Start-BasicScan {
 	Invoke-EndScan
 }
 
-function Start-R6Scan {
+function Start-GameScan {
 	Start-BaseScan
-	Get-RainbowSixAccounts
+	switch ($global:selectedGame) {
+		"Rainbow Six Siege" {
+			Get-RainbowSixData
+		}
+		"Counter Strike" {
+			Get-CounterStrikeData
+		}
+		"Apex Legends" {
+			Get-ApexLegendsData
+		}
+	}
 	Invoke-EndScan
 }
 
