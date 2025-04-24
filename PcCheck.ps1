@@ -17,7 +17,7 @@ Add-Type -AssemblyName System.Windows.Forms
 #region Global Variables
 
 $global:selectedGame = "None"
-$global:storagePath = "$env:USERPROFILE\Documents\PC Scans"
+$global:storagePath = "$env:HOMEDRIVE$env:HOMEPATH\Documents\PC Scans"
 $global:outputFile = $null
 $global:outputLines = @{}
 $global:foundFiles = @()
