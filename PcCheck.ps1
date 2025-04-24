@@ -42,6 +42,11 @@ $global:gameSupport = [PSCustomObject]@{
 	Soon    = @(
 	)
 }
+$global:scanSettings = @{
+	BrowserScan    = $true
+	FileScan       = $true
+	SuspiciousScan = $true
+}
 
 #endregion
 #region UI Sections
@@ -160,6 +165,7 @@ function Show-ScanSettingsMain {
 	}
 	Write-HostCenter "1) Select Game" -Color DarkGreen
 	Write-HostCenter "2) Select Output Path" -Color DarkGreen
+	Write-HostCenter "3) Advanced Scan Settings" -Color DarkGreen
 	Write-Host
 	Write-HostCenter "Esc) Back" -Color DarkGreen
 	Write-Host "`n"
@@ -177,11 +183,71 @@ function Show-ScanSettingsMain {
 			}
 			Show-ScanSettingsMain
 		}
+		51 { Show-ScanSettingsAdvanced }
 		27	{ Show-MainMenu }
 		Default {
 			Show-ScanSettingsMain -ErrorMessage "That is not a valid option!"
 		}
 	}
+}
+
+function Show-ScanSettingsAdvanced {
+	param (
+		[string]$ErrorMessage = $null
+	)
+
+	if ($global:scanSettings.BrowserScan) { $bscan = "ON" }
+	else { $bscan = "OFF" }
+	if ($global:scanSettings.FileScan) { $fscan = "ON" }
+	else { $fscan = "OFF" }
+	if ($global:scanSettings.SuspiciousScan) { $sscan = "ON" }
+	else { $sscan = "OFF" }
+
+	$sln = @(
+		"1) $bscan | Browser Downloads Scan",
+		"2) $fscan | File System Scan",
+		"3) $sscan | Suspicious File Indexing"
+	)
+	$lng = 0
+	foreach ($l in $sln) { if ($l.Length -gt $lng) { $lng = $l.Length } }
+	$lng += [Math]::Floor($lng / 15)
+
+	Clear-Host
+	Write-Host
+	Write-HostCenter "======== Advanced Scan Settings ========" -Color DarkRed
+	Write-Host
+	Write-SelectedGame
+	Write-HostCenter "Output Path: $global:storagePath" -Color DarkCyan
+	Write-Host
+	if ($ErrorMessage) {
+		Write-HostCenter "$ErrorMessage" -Color Red
+		Write-Host
+	}
+	Write-HostCenter $sln[0] -Color DarkGreen -Buffer ($lng - $sln[0].Length)
+	Write-HostCenter $sln[1] -Color DarkGreen -Buffer ($lng - $sln[1].Length)
+	Write-HostCenter $sln[2] -Color DarkGreen -Buffer ($lng - $sln[2].Length)
+	Write-Host
+	Write-HostCenter "Esc) Back" -Color DarkGreen
+	Write-Host "`n"
+	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+
+	$selection = Wait-ForInput
+	switch ($selection) {
+		49	{
+			$global:scanSettings.BrowserScan = (-not $global:scanSettings.BrowserScan)
+		}
+		50	{
+			$global:scanSettings.FileScan = (-not $global:scanSettings.FileScan)
+		}
+		51 {
+			$global:scanSettings.SuspiciousScan = (-not $global:scanSettings.SuspiciousScan)
+		}
+		27	{ Show-ScanSettingsMain }
+		Default {
+			Show-ScanSettingsAdvanced -ErrorMessage "That is not a valid option!"
+		}
+	}
+	Show-ScanSettingsAdvanced
 }
 
 function Show-ScanSettingsGameSelect {
@@ -423,6 +489,8 @@ function Write-OutputFile {
 		Add-Content -Path $global:outputFile -Value $line
 	}
 
+	# GAME WRITES
+
 	if ($global:outputLines.ContainsKey("r6")) {
 		foreach ($line in $global:outputLines["r6"]) {
 			Add-Content -Path $global:outputFile -Value $line
@@ -434,12 +502,22 @@ function Write-OutputFile {
 			Add-Content -Path $global:outputFile -Value $line
 		}
 	}
+
+	# SUSPICIOUS FILE WRITES
+
+	if ($global:outputLines.ContainsKey("exe")) {
+		foreach ($line in $global:outputLines["exe"]) {
+			Add-Content -Path $global:outputFile -Value $line
+		}
+	}
 	
 	if ($global:outputLines.ContainsKey("suspicious")) {
 		foreach ($line in $global:outputLines["suspicious"]) {
 			Add-Content -Path $global:outputFile -Value $line
 		}
 	}
+
+	# BASE SCAN WRITES
 
 	foreach ($line in $global:outputLines["registry"]) {
 		Add-Content -Path $global:outputFile -Value $line
@@ -510,8 +588,8 @@ function Get-BaseNameWithoutExe {
 
 function Show-CustomProgress {
 	param (
-		[int]$current,
-		[int]$total,
+		[int64]$current,
+		[int64]$total,
 		[string]$prefix = "",
 		[int]$barLength = 40,
 		[System.ConsoleColor]$Color = "White"
@@ -637,7 +715,7 @@ function Get-SuspiciousFiles {
 		if ($read -gt 0) {
 			$fileStream.Write($buffer, 0, $read)
 			$bytesRead += $read
-			Show-CustomProgress -current $bytesRead -total $totalBytes -prefix "Downloading"
+			Show-CustomProgress -current $bytesRead -total $totalBytes -prefix "Downloading" -Color DarkGreen
 		}
 	} while ($read -gt 0)
 
@@ -645,7 +723,7 @@ function Get-SuspiciousFiles {
 	$stream.Close()
 	$res.Close()
 	Clear-CurrentLine
-	Write-HostCenter ">> Dictionary Downloaded <<`n`n" -Color Green -NoNewline
+	Write-HostCenter ">> Dictionary Downloaded <<`n" -Color Green
 
 	Write-HostCenter "Building Filter Hash..." -Color Green
 	$words = ((Get-Content $tempFile) -split "`n") | Sort-Object Length -Descending
@@ -658,7 +736,11 @@ function Get-SuspiciousFiles {
 	Write-HostCenter ">> Done! <<`n" -Color Green
 
 	Write-HostCenter "Sifting Through Files..." -Color Green
+	$i = 0
 	foreach ($filename in $global:foundFiles) {
+		Show-CustomProgress -current $i -total ($global:foundFiles.Length) -Color DarkGreen
+		$i++
+
 		$nameOnly = Get-BaseNameWithoutExe -InputString $filename.ToLower()
 
 		if ($alwaysFlag.ContainsKey($nameOnly)) {
@@ -698,6 +780,7 @@ function Get-SuspiciousFiles {
 		}
 	}
 
+	Clear-CurrentLine
 	Write-HostCenter ">> Found $($files.Count) Suspicious Files <<`n" -Color Green
 	
 	if ($files.Count -gt 0) {
@@ -753,7 +836,7 @@ function Install-SQLite3 {
 		if ($read -gt 0) {
 			$fileStream.Write($buffer, 0, $read)
 			$bytesRead += $read
-			Show-CustomProgress -current $bytesRead -total $totalBytes -prefix "Downloading SQLite3..."
+			Show-CustomProgress -current $bytesRead -total $totalBytes -prefix "Downloading SQLite3..." -Color DarkGreen
 		}
 	} while ($read -gt 0)
 
@@ -777,6 +860,19 @@ function Install-SQLite3 {
 function Invoke-SQLite3Cleanup {
 	Remove-Item -Path $global:sqlite3dir -Recurse -Force
 }
+
+function Get-SHA512Hash {
+	param (
+		[Parameter(Mandatory = $true)][string]$InputString
+	)
+
+	$sha512 = [System.Security.Cryptography.SHA512]::Create()
+	$bytes = [System.Text.Encoding]::UTF8.GetBytes($InputString)
+	$hashBytes = $sha512.ComputeHash($bytes)
+	$hashString = [BitConverter]::ToString($hashBytes) -replace '-', ''
+	return $hashString
+}
+
 #endregion
 
 #region Scan Functions
@@ -1139,6 +1235,107 @@ function Get-BrowserDownloadHistory {
 	Invoke-SQLite3Cleanup
 }
 
+# === FUNCTION: Get ALL Known Cheat Executables
+function Get-KnownCheatExecutables {
+	$extensions = @("*.exe")
+	$hashedValues = [PSCustomObject]@{
+		Versions     = @{
+			"5C1C00AED719D4EA25BB910646D578BED055FEE25B921F6CF8A9832C3FEFDAF42E3FFFE592D5CFADEF7AC38BB165BC9D3770ABA79E184B4111FB6B35AC20B861" = "Lethal Client"
+		}
+		Descriptions = @{
+			"A818565CE3C156D04E811013B4E44CA85AAE34984D32B84A7EB9C023546588941801A6C8B79E6D9DA5E9244D08B01EDD486442E7939AD0A62FAA4E651134BBBF" = "Lethal Client"
+		}
+		ProductNames = @{
+			
+		}
+		CompanyNames = @{
+			"36B15C456BAB4D69EF38E67DA4420922043D785D103813387944970633ACAD9D16DE97EAF4693DEC0F0B6879CD65913E9A352E5B5185125D2A6F366915E4AA1F" = "Umbrella Corp. (Possible Lethal Client Loader)"
+		}
+	}
+	$allDrives = Get-PSDrive -PSProvider 'FileSystem' | Where-Object { $null -ne $_.Free }
+	$foundFiles = @()
+	$cheatFiles = @()
+
+	Write-HostCenter "Scanning System for Executables..." -Color Green -Bold
+	Write-HostCenter "Note: This Could Take a While" -Color DarkGray
+
+	$i = 0
+	foreach ($drive in $allDrives) {
+		Show-CustomProgress -current $i -total ($allDrives.Length) -Color DarkGreen -prefix "Scanning $($drive.Root)..."
+		$i++
+		try {
+			$files = Get-ChildItem -Path "$($drive.Root)*" -Include $extensions -Recurse -Force -ErrorAction SilentlyContinue |
+			Where-Object { -not $_.PSIsContainer }
+			$foundFiles += $files
+		}
+		catch {
+			Clear-CurrentLine
+			Write-HostCenter "Failed to scan $($drive.Root): $_" -Color Red
+		}
+	}
+	Show-CustomProgress -current ($allDrives.Length) -total ($allDrives.Length) -Color DarkGreen
+
+	Clear-CurrentLine
+	Write-HostCenter ">> Found $($foundFiles.Length) <<`n" -Color Green
+
+	Write-HostCenter "Indexing Found Executables..." -Color Green
+
+	$totalSize = ($foundFiles | Measure-Object -Property Length -Sum).Sum
+	$scannedSize = 0
+
+	for ($i = 0; $i -lt $foundFiles.Count; $i++) {
+		$file = $foundFiles[$i]
+
+		$info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName)
+
+		$hashedInfo = @{
+			FileVersion     = $null
+			FileDescription = $null
+			ProductName     = $null
+			CompanyName     = $null
+		}
+
+		if ($info.FileVersion -and ($info.FileVersion).Trim().Length -gt 0) {
+			$hashedInfo.FileVersion = (Get-SHA512Hash -InputString $info.FileVersion)
+		}
+		if ($info.FileDescription -and ($info.FileDescription).Trim().Length -gt 0) {
+			$hashedInfo.FileDescription = (Get-SHA512Hash -InputString $info.FileDescription)
+		}
+		if ($info.ProductName -and ($info.ProductName).Trim().Length -gt 0) {
+			$hashedInfo.ProductName = (Get-SHA512Hash -InputString $info.ProductName)
+		}
+		if ($info.CompanyName -and ($info.CompanyName).Trim().Length -gt 0) {
+			$hashedInfo.CompanyName = (Get-SHA512Hash -InputString $info.CompanyName)
+		}
+
+		if ($hashedInfo.FileVersion -and $hashedValues.Versions.ContainsKey($hashedInfo.FileVersion)) {
+			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileVersion]) -> $($file.FullName)"
+		}
+		elseif ($hashedInfo.FileDescription -and $hashedValues.Descriptions.ContainsKey($hashedInfo.FileDescription)) {
+			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileDescription]) -> $($file.FullName)"
+		}
+		elseif ($hashedInfo.ProductName -and $hashedValues.ProductNames.ContainsKey($hashedInfo.ProductName)) {
+			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.ProductName]) -> $($file.FullName)"
+		}
+		elseif ($hashedInfo.CompanyName -and $hashedValues.CompanyNames.ContainsKey($hashedInfo.CompanyName)) {
+			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.CompanyName]) -> $($file.FullName)"
+		}
+        
+		$scannedSize += $file.Length
+		Show-CustomProgress -current $scannedSize -total $totalSize -Color DarkGreen
+	}
+
+	Clear-CurrentLine
+	Write-HostCenter ">> Done! <<`n" -Color Green
+
+	if ($cheatFiles.Length -gt 0) {
+		$global:outputLines["exe"] = @("`n======== CHEAT EXECUTABLES ========")
+		foreach ($line in $cheatFiles) {
+			$global:outputLines["exe"] += $line
+		}
+	}
+}
+
 # === FUNCTION: Rainbow Six Siege
 function Get-RainbowSixData {
 	$uids = @()
@@ -1274,21 +1471,32 @@ function Start-BaseScan {
 	Start-Sleep -Milliseconds 800
 	Clear-Host
 
-	Write-Host
-	Write-HostCenter "Fetching Browser Download History..." -Color Green -Bold
-	Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
-	Get-BrowserDownloadHistory
+	if ($global:scanSettings.BrowserScan) {
+		Write-Host
+		Write-HostCenter "Fetching Browser Download History..." -Color Green -Bold
+		Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
+		Get-BrowserDownloadHistory
 	
-	Start-Sleep -Milliseconds 800
-	Clear-Host
+		Start-Sleep -Milliseconds 800
+		Clear-Host
+	}
 
-	Clear-Host
-	Write-Host
-	Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
-	Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
-	Get-SuspiciousFiles
+	if ($global:scanSettings.FileScan) {
+		Write-Host
+		Get-KnownCheatExecutables
 
-	Start-Sleep -Milliseconds 800
+		Start-Sleep -Milliseconds 800
+		Clear-Host
+	}
+
+	if ($global:scanSettings.SuspiciousScan) {
+		Write-Host
+		Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
+		Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
+		Get-SuspiciousFiles
+
+		Start-Sleep -Milliseconds 800
+ 	}
 }
 
 function Start-BasicScan {
