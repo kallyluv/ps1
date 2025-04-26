@@ -1335,16 +1335,16 @@ function Get-KnownCheatExecutables {
 		}
 
 		if ($hashedInfo.FileDescription -and $hashedValues.Descriptions.ContainsKey($hashedInfo.FileDescription)) {
-			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileDescription]) -> $($file.FullName)"
+			$cheatFiles += "$($hashedValues.Descriptions[$hashedInfo.FileDescription]) -> $($file.FullName)"
 		}
 		elseif ($hashedInfo.ProductName -and $hashedValues.ProductNames.ContainsKey($hashedInfo.ProductName)) {
-			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.ProductName]) -> $($file.FullName)"
+			$cheatFiles += "$($hashedValues.ProductNames[$hashedInfo.ProductName]) -> $($file.FullName)"
 		}
 		elseif ($hashedInfo.FileVersion -and $hashedValues.Versions.ContainsKey($hashedInfo.FileVersion)) {
 			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileVersion]) -> $($file.FullName)"
 		}
 		elseif ($hashedInfo.CompanyName -and $hashedValues.CompanyNames.ContainsKey($hashedInfo.CompanyName)) {
-			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.CompanyName]) -> $($file.FullName)"
+			$cheatFiles += "$($hashedValues.CompanyNames[$hashedInfo.CompanyName]) -> $($file.FullName)"
 		}
         
 		$scannedSize += $file.Length
