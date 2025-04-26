@@ -346,6 +346,15 @@ function Write-HostCenter {
 
 	) 
 
+	$lines = ($Message -split "`n")
+
+	if ($lines.Length -gt 1) {
+		foreach ($line in $lines) {
+			Write-HostCenter "$line" -Buffer $Buffer -Color $Color -Background $Background
+		}
+		return
+	}
+
 	$originalFg = $Host.UI.RawUI.ForegroundColor
 	$originalBg = $Host.UI.RawUI.BackgroundColor
 
@@ -535,6 +544,10 @@ function Write-OutputFile {
 	}
 
 	foreach ($line in $global:outputLines["network"]) {
+		Add-Content -Path $global:outputFile -Value $line
+	}
+
+	foreach ($line in $global:outputLines["display"]) {
 		Add-Content -Path $global:outputFile -Value $line
 	}
 
@@ -874,7 +887,7 @@ function Get-SHA512Hash {
 
 #endregion
 
-#region Scan Functions
+#region Internal Scan
 # === FUNCTION: Get Execution History from Event Logs ===
 function Get-ExecutionHistoryFromEventLogs {
 	Write-HostCenter "Scanning Windows Security Event Logs (4688)..." -Color Green -Bold
@@ -1031,17 +1044,24 @@ function Get-OpenNetworkPorts {
 }
 
 # === FUNCTION: DMA-capable Devices ===
-function Get-DMADevices {
+function Get-DevicesInfo {
 	Write-HostCenter "Scanning Devices..." -Color Green -Bold
+	$types = @{}
 	$global:outputLines["device"] = @("`n======== DEVICE SCAN ========")
 	try {
-		$devices = Get-PnpDevice -PresentOnly | Where-Object { $_.FriendlyName -match "USB|Thunderbolt|1394|DMA" }
+		$devices = Get-PnpDevice -PresentOnly | Where-Object { $_.Class -match "USB|Net|Mouse|SoftwareDevice" }
 		foreach ($dev in $devices) {
-			$global:outputLines["device"] += "$($dev.FriendlyName) - $($dev.Class) - $($dev.Status)"
+			if (-not $types.ContainsKey("$($dev.Class)")) { $types["$($dev.Class)"] = @() }
+			$types["$($dev.Class)"] += "$($dev.Class) | $($dev.FriendlyName) - $($dev.Status)"
 		}
 	}
  catch {
 		$global:outputLines["device"] += "Failed to check DMA-related devices: $_"
+	}
+	foreach ($type in ($types.Keys)) {
+		foreach ($d in ($types["$type"])) {
+			$global:outputLines["device"] += $d
+		}
 	}
 	Write-HostCenter ">> Device scan complete! <<`n" -Color DarkGreen
 }
@@ -1049,6 +1069,7 @@ function Get-DMADevices {
 # === FUNCTION: PCIe Devices (like GPU) ===
 function Get-PCIeDevices {
 	Write-HostCenter "Scanning PCIe Devices..." -Color Green -Bold
+	$types = @{}
 	$global:outputLines["pcie"] = @("`n======== PCIE SCAN ========")
 	try {
 		$pcieDevices = Get-PnpDevice -PresentOnly | Where-Object {
@@ -1060,13 +1081,19 @@ function Get-PCIeDevices {
 		}
 		else {
 			foreach ($device in $pcieDevices) {
-				$desc = "$($device.FriendlyName) - Class: $($device.Class) - Status: $($device.Status)"
-				$global:outputLines["pcie"] += $desc
+				if (-not $types.ContainsKey($device.Class)) { $types["$($device.Class)"] = @() }
+				$desc = "$($device.Class) | $($device.FriendlyName) - $($device.Status)"
+				$types["$($device.Class)"] += $desc
 			}
 		}
 	}
  catch {
 		$global:outputLines["pcie"] += "Failed to scan PCIe devices: $_"
+	}
+	foreach ($type in ($types.Keys)) {
+		foreach ($d in ($types["$type"])) {
+			$global:outputLines["pcie"] += $d
+		}
 	}
 	Write-HostCenter ">> PCIe device scan complete! <<`n" -Color DarkGreen
 }
@@ -1307,14 +1334,14 @@ function Get-KnownCheatExecutables {
 			$hashedInfo.CompanyName = (Get-SHA512Hash -InputString $info.CompanyName)
 		}
 
-		if ($hashedInfo.FileVersion -and $hashedValues.Versions.ContainsKey($hashedInfo.FileVersion)) {
-			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileVersion]) -> $($file.FullName)"
-		}
-		elseif ($hashedInfo.FileDescription -and $hashedValues.Descriptions.ContainsKey($hashedInfo.FileDescription)) {
+		if ($hashedInfo.FileDescription -and $hashedValues.Descriptions.ContainsKey($hashedInfo.FileDescription)) {
 			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileDescription]) -> $($file.FullName)"
 		}
 		elseif ($hashedInfo.ProductName -and $hashedValues.ProductNames.ContainsKey($hashedInfo.ProductName)) {
 			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.ProductName]) -> $($file.FullName)"
+		}
+		elseif ($hashedInfo.FileVersion -and $hashedValues.Versions.ContainsKey($hashedInfo.FileVersion)) {
+			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.FileVersion]) -> $($file.FullName)"
 		}
 		elseif ($hashedInfo.CompanyName -and $hashedValues.CompanyNames.ContainsKey($hashedInfo.CompanyName)) {
 			$cheatFiles += "$($hashedValues.Versions[$hashedInfo.CompanyName]) -> $($file.FullName)"
@@ -1335,6 +1362,52 @@ function Get-KnownCheatExecutables {
 	}
 }
 
+#endregion
+#region DMA Scan
+
+function Get-SuspiciousDisplayInfo {
+	Write-HostCenter "Fetching Display Adapter Information..." -Color Green
+	$global:outputLines["display"] = @("`n======== DISPLAY INFORMATION ========")
+	$results = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object {
+		$manufacturer = [System.Text.Encoding]::ASCII.GetString($_.ManufacturerName) -replace '\0', ''
+		$productCode = [System.Text.Encoding]::ASCII.GetString($_.ProductCodeID) -replace '\0', ''
+		$serial = [System.Text.Encoding]::ASCII.GetString($_.SerialNumberID) -replace '\0', ''
+		$userFriendlyName = [System.Text.Encoding]::ASCII.GetString($_.UserFriendlyName) -replace '\0', ''
+
+		$isSuspiciousLength = ($userFriendlyName.Length -le 6)
+		$isGeneric = ($userFriendlyName -match "Generic" -or $userFriendlyName -eq "")
+
+		[PSCustomObject]@{
+			Manufacturer     = $manufacturer
+			ProductCode      = $productCode
+			SerialNumber     = $serial
+			UserFriendlyName = $userFriendlyName
+			SuspiciousLength = ($isSuspiciousLength)
+			GenericOrEmpty   = ($isGeneric)
+			PossibleFuser    = ($isSuspiciousLength -or $isGeneric)
+		}
+	}
+
+	foreach ($display in $results) {
+		Write-HostCenter "Found: $($display.UserFriendlyName) - $($display.SerialNumber)" -Color Green
+		if ($display.PossibleFuser) {
+			if ($display.GenericOrEmpty) {
+				$global:outputLines["display"] += "$($display.UserFriendlyName) - $($display.SerialNumber), $($display.Manufacturer) | POSSIBLE FUSER: Generic/Empty"
+			}
+			elseif ($display.SuspiciousLength) {
+				$global:outputLines["display"] += "$($display.UserFriendlyName) - $($display.SerialNumber), $($display.Manufacturer) | POSSIBLE FUSER: Suspicious Length"
+			}
+		}
+		else {
+			$global:outputLines["display"] += "$($display.UserFriendlyName) - $($display.SerialNumber), $($display.Manufacturer)"
+		}
+	}
+	Write-HostCenter ">> Done! <<`n" -Color Green
+}
+
+#endregion
+
+#region Game Scan
 # === FUNCTION: Rainbow Six Siege
 function Get-RainbowSixData {
 	$uids = @()
@@ -1461,7 +1534,7 @@ function Start-BaseScan {
 	Write-HostCenter "Starting Deep PC scan -> Hardware Scan`n" -Color Magenta
 
 	Get-OpenNetworkPorts
-	Get-DMADevices
+	Get-DevicesInfo
 	Get-PCIeDevices
 	Get-BIOSInfo
 	Get-MotherboardInfo
@@ -1470,32 +1543,41 @@ function Start-BaseScan {
 	Start-Sleep -Milliseconds 800
 	Clear-Host
 
+	Write-Host
+	Write-HostCenter "Starting DMA-Specific Scans & Diagnostics" -Color Magenta
+	Write-HostCenter "Note: This part of the scan may be unreliable due to the`ncomplex nature of DMAs" -Color DarkGray
+	Write-Host
+	Get-SuspiciousDisplayInfo
+
+	Start-Sleep -Milliseconds 800
+
 	if ($global:scanSettings.BrowserScan) {
+		Clear-Host
 		Write-Host
 		Write-HostCenter "Fetching Browser Download History..." -Color Green -Bold
 		Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
 		Get-BrowserDownloadHistory
 	
 		Start-Sleep -Milliseconds 800
-		Clear-Host
 	}
 
 	if ($global:scanSettings.FileScan) {
+		Clear-Host
 		Write-Host
 		Get-KnownCheatExecutables
 
 		Start-Sleep -Milliseconds 800
-		Clear-Host
 	}
 
 	if ($global:scanSettings.SuspiciousScan) {
+		Clear-Host
 		Write-Host
 		Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
 		Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
 		Get-SuspiciousFiles
 
 		Start-Sleep -Milliseconds 800
- 	}
+	}
 }
 
 function Start-BasicScan {
