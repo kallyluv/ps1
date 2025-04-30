@@ -543,11 +543,15 @@ function Write-OutputFile {
 		Add-Content -Path $global:outputFile -Value $line
 	}
 
-	foreach ($line in $global:outputLines["network"]) {
+	foreach ($line in $global:outputLines["display"]) {
 		Add-Content -Path $global:outputFile -Value $line
 	}
 
-	foreach ($line in $global:outputLines["display"]) {
+	foreach ($line in $global:outputLines["net"]) {
+		Add-Content -Path $global:outputFile -Value $line
+	}
+
+	foreach ($line in $global:outputLines["network"]) {
 		Add-Content -Path $global:outputFile -Value $line
 	}
 
@@ -1405,6 +1409,66 @@ function Get-SuspiciousDisplayInfo {
 	Write-HostCenter ">> Done! <<`n" -Color Green
 }
 
+function Get-SuspiciousNetAdapters {
+	$global:outputLines["net"] = @("`n======== NETWORK ADAPTERS ========")
+	$adapters = Get-NetAdapter
+
+	$found = @()
+
+	foreach ($adapter in $adapters) {
+		$output = @{
+			ID           = ($adapter.Name)
+			Enabled      = $false
+			Connected    = $false
+			NetSSID      = $null
+			NetCategory  = $null
+			AvailableNet = 0
+		}
+		$adapterName = $adapter.Name
+		$status = $adapter.Status
+
+		if ($status -eq 'Up') {
+			$output.Enabled = $true
+			$connection = Get-NetConnectionProfile -InterfaceAlias $adapterName -ErrorAction SilentlyContinue
+			if ($connection) {
+				$output.Connected = $true
+				$output.NetSSID = "$($connection.Name)"
+				$output.NetCategory = "$($connection.NetworkCategory)"
+			}
+			else {
+				$output.Connected = $false
+				$isWiFi = ($adapter.InterfaceDescription -match 'Wireless' -or $adapter.MediaType -eq '802.11')
+				if ($isWiFi) {
+					$availableNetworks = netsh wlan show networks interface="$adapterName"
+					$ssidMatches = ($availableNetworks | Select-String '^\s*SSID\s+\d+\s+:\s+.*')
+					if ($ssidMatches.Count -gt 0) {
+						$output.AvailableNet = ($ssidMatches.Count)
+					}
+				}
+			}
+		}
+
+		$found += $output
+	}
+
+	foreach ($net in $found) {
+		$line = "$($net.ID) - $(if ($net.Enabled) { "Enabled" } else { "Disabled" })"
+		if ($net.Connected) {
+			$line += " - Connected`n`tSSID: $($net.NetSSID)`n`tCat: $($net.NetCategory)"
+		}
+		elseif ($net.Enabled) {
+			$line += " - Not Connected`n`tAvailable Networks: $($net.AvailableNet)"
+			if ($net.AvailableNet -lt 1) {
+				$line += "`n`tPossible Suspicious Activity"
+			}
+		}
+		$global:outputLines["net"] += $line
+	}
+	if ($found.Count -lt 1) {
+		$global:outputLines["net"] += "No network adapters found???"
+	}
+}
+
 #endregion
 
 #region Game Scan
@@ -1548,6 +1612,7 @@ function Start-BaseScan {
 	Write-HostCenter "Note: This part of the scan may be unreliable due to the`ncomplex nature of DMAs" -Color DarkGray
 	Write-Host
 	Get-SuspiciousDisplayInfo
+	Get-SuspiciousNetAdapters
 
 	Start-Sleep -Milliseconds 800
 
