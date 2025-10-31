@@ -76,6 +76,48 @@ $global:edidManufacturers = @{
 	"BBY" = "Insignia (Best Buy)"
 }
 
+# Hardware ID patterns for each manufacturer - for validation
+$global:hardwareIDPatterns = @{
+	"DEL" = @("DISPLAY\DEL", "Monitor\DEL")
+	"SAM" = @("DISPLAY\SAM", "Monitor\SAM")
+	"GSM" = @("DISPLAY\GSM", "Monitor\GSM")
+	"ACR" = @("DISPLAY\ACR", "Monitor\ACR")
+	"ACI" = @("DISPLAY\ACI", "Monitor\ACI")
+	"BNQ" = @("DISPLAY\BNQ", "Monitor\BNQ")
+	"HWP" = @("DISPLAY\HWP", "Monitor\HWP")
+	"AOC" = @("DISPLAY\AOC", "Monitor\AOC")
+	"VSC" = @("DISPLAY\VSC", "Monitor\VSC")
+	"PHL" = @("DISPLAY\PHL", "Monitor\PHL")
+	"IVM" = @("DISPLAY\IVM", "Monitor\IVM")
+	"MSI" = @("DISPLAY\MSI", "Monitor\MSI")
+	"LEN" = @("DISPLAY\LEN", "Monitor\LEN")
+	"SNY" = @("DISPLAY\SNY", "Monitor\SNY")
+	"NEC" = @("DISPLAY\NEC", "Monitor\NEC")
+	"ENC" = @("DISPLAY\ENC", "Monitor\ENC")
+	"MEI" = @("DISPLAY\MEI", "Monitor\MEI")
+	"HPN" = @("DISPLAY\HPN", "Monitor\HPN")
+	"APP" = @("DISPLAY\APP", "Monitor\APP")
+	"HSD" = @("DISPLAY\HSD", "Monitor\HSD")
+	"CMO" = @("DISPLAY\CMO", "Monitor\CMO")
+	"LPL" = @("DISPLAY\LPL", "Monitor\LPL")
+	"SEC" = @("DISPLAY\SEC", "Monitor\SEC")
+	"AUO" = @("DISPLAY\AUO", "Monitor\AUO")
+	"BOE" = @("DISPLAY\BOE", "Monitor\BOE")
+	"BBY" = @("DISPLAY\BBY", "Monitor\BBY")
+}
+
+# Suspicious serial number patterns
+$global:suspiciousSerialPatterns = @(
+	"^[0-9]{1,3}$",           # Very short numeric (0-999)
+	"^0+$",                    # All zeros
+	"^1+$",                    # All ones
+	"^(123|1234|12345)$",      # Sequential
+	"^(test|temp|demo).*",     # Test/Demo units
+	"^default$",               # Default value
+	"^[A-Z]{1,2}$",            # Single/double letters only
+	"^\s*$"                    # Empty/whitespace
+)
+
 # Known DMA/Communications Driver identifiers
 $global:dmaDrivers = @{
 	"FTDI"    = @("FTDIBUS", "ftdibus.sys", "ftser2k.sys", "ftdi", "Future Technology Devices")
@@ -84,6 +126,120 @@ $global:dmaDrivers = @{
 	"PL2303"  = @("PL2303", "ser2pl.sys", "Prolific")
 	"CP210x"  = @("CP210x", "silabser.sys", "Silicon Labs", "silabenm.sys")
 	"Arduino" = @("Arduino", "usbser.sys", "wdfcovusb.sys")
+}
+
+#endregion
+#region Validation Functions
+
+function Test-SuspiciousSerialNumber {
+	param([string]$serial)
+	
+	if ([string]::IsNullOrWhiteSpace($serial)) {
+		return $true
+	}
+	
+	foreach ($pattern in $global:suspiciousSerialPatterns) {
+		if ($serial -match $pattern) {
+			return $true
+		}
+	}
+	
+	return $false
+}
+
+function Test-HardwareIDMatch {
+	param(
+		[string]$manufacturerCode,
+		[array]$hardwareIDs
+	)
+	
+	if (-not $manufacturerCode -or -not $hardwareIDs) {
+		return $false
+	}
+	
+	# Check if manufacturer has known patterns
+	if (-not $global:hardwareIDPatterns.ContainsKey($manufacturerCode)) {
+		return $true # Unknown manufacturer, can't validate
+	}
+	
+	$expectedPatterns = $global:hardwareIDPatterns[$manufacturerCode]
+	
+	foreach ($hwid in $hardwareIDs) {
+		foreach ($pattern in $expectedPatterns) {
+			if ($hwid -match [regex]::Escape($pattern)) {
+				return $true # Found matching pattern
+			}
+		}
+	}
+	
+	return $false # No matching patterns found
+}
+
+function Get-PNPIDFromOnlineDatabase {
+	param([string]$manufacturerCode)
+	
+	if ([string]::IsNullOrWhiteSpace($manufacturerCode) -or $manufacturerCode.Length -ne 3) {
+		return $null
+	}
+	
+	try {
+		# Query online PNP ID database
+		$url = "https://uefi.org/PNP_ACPI_Registry"
+		$response = Invoke-WebRequest -Uri $url -TimeoutSec 5 -UseBasicParsing -ErrorAction SilentlyContinue
+		
+		if ($response.Content -match "$manufacturerCode.*?([A-Za-z0-9\s\(\)\.]+)") {
+			return $matches[1].Trim()
+		}
+	}
+	catch {
+		# Silently fail - online lookup is optional
+	}
+	
+	return $null
+}
+
+function Test-DisplayCoherence {
+	param(
+		[string]$manufacturerCode,
+		[string]$manufacturerName,
+		[string]$userFriendlyName,
+		[string]$productCode,
+		[array]$hardwareIDs
+	)
+	
+	$issues = @()
+	
+	# Check 1: Manufacturer code vs friendly name mismatch
+	if ($userFriendlyName -and $manufacturerName -ne "Unknown") {
+		$nameLower = $userFriendlyName.ToLower()
+		$mfgNameLower = $manufacturerName.ToLower()
+		
+		# Extract brand names for comparison
+		$knownBrands = @("dell", "samsung", "lg", "acer", "asus", "benq", "hp", "aoc", 
+			"viewsonic", "philips", "iiyama", "msi", "lenovo", "sony", "nec",
+			"eizo", "panasonic", "apple", "insignia")
+		
+		$brandInName = $knownBrands | Where-Object { $nameLower -match $_ }
+		$brandInMfg = $knownBrands | Where-Object { $mfgNameLower -match $_ }
+		
+		if ($brandInName -and $brandInMfg -and ($brandInName -ne $brandInMfg)) {
+			$issues += "Name/Manufacturer Mismatch"
+		}
+	}
+	
+	# Check 2: Hardware ID validation
+	if ($hardwareIDs -and $manufacturerCode) {
+		if (-not (Test-HardwareIDMatch -manufacturerCode $manufacturerCode -hardwareIDs $hardwareIDs)) {
+			$issues += "Hardware ID Mismatch"
+		}
+	}
+	
+	# Check 3: Product code validation (should not be empty for real displays)
+	if ([string]::IsNullOrWhiteSpace($productCode)) {
+		$issues += "Missing Product Code"
+	}
+	
+	return $issues
 }
 
 #endregion
@@ -974,7 +1130,7 @@ function Get-SuspiciousFiles {
 			if ($nameOnly -like "*$flagword*") {
 				# Skip if it contains known legitimate software patterns
 				if ($nameOnly -like "*fabfilter*" -or $nameOnly -like "*bundle*" -or $nameOnly -like "*waves*" -or 
-				    $nameOnly -like "*valhalla*" -or $nameOnly -like "*antares*" -or $nameOnly -like "*sysinternals*") {
+					$nameOnly -like "*valhalla*" -or $nameOnly -like "*antares*" -or $nameOnly -like "*sysinternals*") {
 					continue
 				}
 				$foundAlwaysFlag = $true
@@ -1727,7 +1883,8 @@ function Get-SuspiciousDisplayInfo {
 		$global:outputLines["display"] += "Failed to read registry monitors: $_"
 	}
 
-	# Get currently connected monitors
+	# Get currently connected monitors with deep validation
+	$allSerials = @()
 	$results = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID -ErrorAction SilentlyContinue | ForEach-Object {
 		$manufacturer = [System.Text.Encoding]::ASCII.GetString($_.ManufacturerName) -replace '\0', ''
 		$productCode = [System.Text.Encoding]::ASCII.GetString($_.ProductCodeID) -replace '\0', ''
@@ -1736,9 +1893,38 @@ function Get-SuspiciousDisplayInfo {
 		$yearOfManufacture = $_.YearOfManufacture
 		$weekOfManufacture = $_.WeekOfManufacture
 
+		# Basic validation
 		$isGeneric = ($userFriendlyName -match "Generic" -or $userFriendlyName -eq "")
 		$manufacturerValid = $global:edidManufacturers.ContainsKey($manufacturer)
 		$manufacturerName = if ($manufacturerValid) { $global:edidManufacturers[$manufacturer] } else { "Unknown" }
+		
+		# Advanced validation - Serial number checks
+		$suspiciousSerial = Test-SuspiciousSerialNumber -serial $serial
+		
+		# Check for duplicate serials
+		$duplicateSerial = $allSerials -contains $serial
+		$allSerials += $serial
+		
+		# Get hardware IDs from registry for this display
+		$regMatch = $registryMonitors | Where-Object { 
+			$_.FriendlyName -match [regex]::Escape($userFriendlyName) -or 
+			$_.DeviceDesc -match [regex]::Escape($userFriendlyName)
+		} | Select-Object -First 1
+		
+		$hardwareIDs = if ($regMatch) { $regMatch.HardwareID } else { @() }
+		
+		# Deep coherence validation
+		$coherenceIssues = Test-DisplayCoherence -manufacturerCode $manufacturer `
+			-manufacturerName $manufacturerName `
+			-userFriendlyName $userFriendlyName `
+			-productCode $productCode `
+			-hardwareIDs $hardwareIDs
+		
+		# Try to verify manufacturer from online database
+		$onlineVerification = $null
+		if (-not $manufacturerValid) {
+			$onlineVerification = Get-PNPIDFromOnlineDatabase -manufacturerCode $manufacturer
+		}
 
 		[PSCustomObject]@{
 			Manufacturer        = $manufacturer
@@ -1748,10 +1934,15 @@ function Get-SuspiciousDisplayInfo {
 			UserFriendlyName    = $userFriendlyName
 			YearOfManufacture   = $yearOfManufacture
 			WeekOfManufacture   = $weekOfManufacture
+			HardwareIDs         = $hardwareIDs
 			GenericOrEmpty      = $isGeneric
 			InvalidManufacturer = -not $manufacturerValid
+			SuspiciousSerial    = $suspiciousSerial
+			DuplicateSerial     = $duplicateSerial
+			CoherenceIssues     = $coherenceIssues
+			OnlineVerification  = $onlineVerification
 			Connected           = $true
-			PossibleFuser       = ($isGeneric -or (-not $manufacturerValid))
+			PossibleFuser       = ($isGeneric -or (-not $manufacturerValid) -or $suspiciousSerial -or $duplicateSerial -or ($coherenceIssues.Count -gt 0))
 		}
 	}
 
@@ -1760,20 +1951,47 @@ function Get-SuspiciousDisplayInfo {
 		$global:outputLines["display"] += "No connected displays detected!"
 	}
 	foreach ($display in $results) {
-		Write-HostCenter "Connected: $($display.UserFriendlyName) - $($display.SerialNumber)" -Color Green
+		$displayColor = if ($display.PossibleFuser) { "Yellow" } else { "Green" }
+		Write-HostCenter "Connected: $($display.UserFriendlyName) - $($display.SerialNumber)" -Color $displayColor
+		
 		$line = "[$($display.Manufacturer)] $($display.UserFriendlyName) - SN: $($display.SerialNumber)"
 		if ($display.YearOfManufacture) {
 			$line += " | Mfg: Week $($display.WeekOfManufacture)/$($display.YearOfManufacture)"
 		}
 		
+		# Collect all validation flags
 		$flags = @()
-		if ($display.GenericOrEmpty) { $flags += "Generic/Empty" }
-		if ($display.InvalidManufacturer) { $flags += "Unknown Mfg Code" }
+		if ($display.GenericOrEmpty) { $flags += "Generic/Empty Name" }
+		if ($display.InvalidManufacturer) { 
+			$flags += "Unknown Mfg Code" 
+			if ($display.OnlineVerification) {
+				$flags += "Online DB: $($display.OnlineVerification)"
+			}
+		}
+		if ($display.SuspiciousSerial) { $flags += "Suspicious Serial" }
+		if ($display.DuplicateSerial) { $flags += "Duplicate Serial" }
+		if ($display.CoherenceIssues.Count -gt 0) { 
+			$flags += $display.CoherenceIssues 
+		}
 		
 		if ($flags.Count -gt 0) {
 			$line += " | FLAGS: $($flags -join ', ')"
 		}
+		
 		$global:outputLines["display"] += $line
+		
+		# Add hardware ID validation details if available
+		if ($display.HardwareIDs -and $display.HardwareIDs.Count -gt 0) {
+			$global:outputLines["display"] += "  Hardware ID: $($display.HardwareIDs[0])"
+			
+			# Check if hardware ID matches manufacturer
+			if ($display.Manufacturer -and $global:hardwareIDPatterns.ContainsKey($display.Manufacturer)) {
+				$hwMatch = Test-HardwareIDMatch -manufacturerCode $display.Manufacturer -hardwareIDs $display.HardwareIDs
+				if (-not $hwMatch) {
+					$global:outputLines["display"] += "  WARNING: Hardware ID does not match manufacturer code pattern!"
+				}
+			}
+		}
 	}
 
 	# Check for disconnected monitors in registry
