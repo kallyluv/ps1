@@ -74,6 +74,7 @@ $global:edidManufacturers = @{
 	"AUO" = "AU Optronics"
 	"BOE" = "BOE"
 	"BBY" = "Insignia (Best Buy)"
+	"SHP" = "Sharp"
 }
 
 # Hardware ID patterns for each manufacturer - for validation
@@ -104,6 +105,7 @@ $global:hardwareIDPatterns = @{
 	"AUO" = @("DISPLAY\AUO", "Monitor\AUO")
 	"BOE" = @("DISPLAY\BOE", "Monitor\BOE")
 	"BBY" = @("DISPLAY\BBY", "Monitor\BBY")
+	"SHP" = @("DISPLAY\SHP", "Monitor\SHP")
 }
 
 # Suspicious serial number patterns
@@ -980,7 +982,8 @@ function Get-SuspiciousFiles {
 		"serum", "massive", "omnisphere", "nexus", "sylenth", "spire", "dune", "pigments", "vital",
 		"kontakt", "komplete", "reaktor", "battery", "maschine", "traktor", "guitar", "keyscape",
 		"blender", "maya", "max", "cinema4d", "houdini", "zbrush", "substance", "unreal", "unity",
-		"obs", "streamlabs", "xsplit", "voicemeeter", "audacity", "davinci", "resolve", "vegas", "camtasia"
+		"obs", "streamlabs", "xsplit", "voicemeeter", "audacity", "davinci", "resolve", "vegas", "camtasia",
+		"wemod", "easyanticheat", "battleye", "vanguard", "faceit", "ricochet", "uploader", "crs-uploader"
 	)
 	$falsePositives = @{}
 	$adict = @(
@@ -998,8 +1001,8 @@ function Get-SuspiciousFiles {
 			foreach ($entry in @(
 					"bun", "demoncore", "crusader", "tomware", "hydro", "goldcore", "mojo", 'dogo', 'hex', 'perc', 'kraken', 'inferno', 'frost', 'aptitude',
 					"phantom", "overlay", "aimex", "engineowning", "iwantcheats", "battlelog", "artificialaiming", "skycheats", "privatecheatz",
-					"securecheats", "unknowncheats", "systemcheats", "aimgods", "elitepvpers", "interium", "wemod", "trainer",
-					"injector", "external", "internal", "bypass", "spoofer", "eac", "battleye"
+					"securecheats", "unknowncheats", "systemcheats", "aimgods", "elitepvpers", "interium",
+					"injector", "external", "internal", "bypass", "spoofer"
 				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
@@ -1112,6 +1115,33 @@ function Get-SuspiciousFiles {
 	foreach ($filename in $global:foundFiles) {
 		Show-CustomProgress -current $i -total ($global:foundFiles.Length) -Color DarkGreen
 		$i++
+
+		# Skip metadata files - these are not executables
+		if ($filename -match '\.(FriendlyAppName|ApplicationCompany|Publisher)$') {
+			continue
+		}
+		
+		# Skip legitimate anti-cheat and game protection
+		if ($filename -match '(EasyAntiCheat|BattlEye|Vanguard|FACEIT|Ricochet)' -and 
+			$filename -notmatch '(bypass|crack|disable|remov)') {
+			continue
+		}
+		
+		# Skip temp files from legitimate installers in Temp folder with GUID pattern
+		if ($filename -match '\\Temp\\\{[A-F0-9\-]+\}\\.*\.tmp\.exe') {
+			continue
+		}
+		
+		# Skip legitimate game executables in known game directories
+		if ($filename -match '(steamapps\\common|Epic Games|Program Files.*\\Games)\\.*\\(BF2042|DaysGone|Fortnite|.*Game)\.exe') {
+			continue
+		}
+		
+		# Skip crash reporter and uploader tools from game engines
+		if ($filename -match '(crash|error|report|upload).*\.exe' -and 
+			$filename -match '(steamapps|Epic Games|Program Files|ThirdParty|Engine\\Binaries)') {
+			continue
+		}
 
 		$nameOnly = Get-BaseNameWithoutExe -InputString $filename.ToLower()
 
