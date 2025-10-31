@@ -73,6 +73,7 @@ $global:edidManufacturers = @{
 	"SEC" = "Samsung"
 	"AUO" = "AU Optronics"
 	"BOE" = "BOE"
+	"BBY" = "Insignia (Best Buy)"
 }
 
 # Known DMA/Communications Driver identifiers
