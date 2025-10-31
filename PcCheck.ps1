@@ -44,7 +44,45 @@ $global:gameSupport = [PSCustomObject]@{
 $global:scanSettings = @{
 	BrowserScan    = $true
 	FileScan       = $true
-	SuspiciousScan = $true
+}
+
+# EDID Manufacturer Codes (PNP IDs) - Common legitimate manufacturers
+$global:edidManufacturers = @{
+	"DEL" = "Dell"
+	"SAM" = "Samsung"
+	"GSM" = "LG (Goldstar)"
+	"ACR" = "Acer"
+	"ACI" = "ASUS"
+	"BNQ" = "BenQ"
+	"HWP" = "HP"
+	"AOC" = "AOC"
+	"VSC" = "ViewSonic"
+	"PHL" = "Philips"
+	"IVM" = "Iiyama"
+	"MSI" = "MSI"
+	"LEN" = "Lenovo"
+	"SNY" = "Sony"
+	"NEC" = "NEC"
+	"ENC" = "Eizo"
+	"MEI" = "Panasonic"
+	"HPN" = "HP"
+	"APP" = "Apple"
+	"HSD" = "HannStar"
+	"CMO" = "Chi Mei"
+	"LPL" = "LG Philips"
+	"SEC" = "Samsung"
+	"AUO" = "AU Optronics"
+	"BOE" = "BOE"
+}
+
+# Known DMA/Communications Driver identifiers
+$global:dmaDrivers = @{
+	"FTDI"    = @("FTDIBUS", "ftdibus.sys", "ftser2k.sys", "ftdi", "Future Technology Devices")
+	"CH340"   = @("CH341SER", "ch341ser.sys", "ch34x64.sys", "WCH.CN", "wch.cn")
+	"CH341"   = @("CH341SER_A64", "ch341s64.sys", "WCH.CN")
+	"PL2303"  = @("PL2303", "ser2pl.sys", "Prolific")
+	"CP210x"  = @("CP210x", "silabser.sys", "Silicon Labs", "silabenm.sys")
+	"Arduino" = @("Arduino", "usbser.sys", "wdfcovusb.sys")
 }
 
 #endregion
@@ -84,7 +122,7 @@ function Show-MainMenu {
 		Write-HostCenter "- Selecting it will result in little to no differences in Scan Results -" -Color Red
 		Write-Host "`n"
 	}
-	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+	Write-HostCenter "======== Written by @imluvvr on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
@@ -130,7 +168,7 @@ function Show-ConfirmNoGameScan {
 	Write-HostCenter "1) Yes" -Color DarkGreen
 	Write-HostCenter "2) No " -Color DarkGreen
 	Write-Host "`n"
-	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+	Write-HostCenter "======== Written by @imluvvr on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
@@ -168,7 +206,7 @@ function Show-ScanSettingsMain {
 	Write-Host
 	Write-HostCenter "Esc) Back" -Color DarkGreen
 	Write-Host "`n"
-	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+	Write-HostCenter "======== Written by @imluvvr on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
@@ -199,13 +237,10 @@ function Show-ScanSettingsAdvanced {
 	else { $bscan = "OFF" }
 	if ($global:scanSettings.FileScan) { $fscan = "ON" }
 	else { $fscan = "OFF" }
-	if ($global:scanSettings.SuspiciousScan) { $sscan = "ON" }
-	else { $sscan = "OFF" }
 
 	$sln = @(
 		"1) $bscan | Browser Downloads Scan",
-		"2) $fscan | File System Scan",
-		"3) $sscan | Suspicious File Indexing"
+		"2) $fscan | File System Scan"
 	)
 	$lng = 0
 	foreach ($l in $sln) { if ($l.Length -gt $lng) { $lng = $l.Length } }
@@ -224,11 +259,10 @@ function Show-ScanSettingsAdvanced {
 	}
 	Write-HostCenter $sln[0] -Color DarkGreen -Buffer ($lng - $sln[0].Length)
 	Write-HostCenter $sln[1] -Color DarkGreen -Buffer ($lng - $sln[1].Length)
-	Write-HostCenter $sln[2] -Color DarkGreen -Buffer ($lng - $sln[2].Length)
 	Write-Host
 	Write-HostCenter "Esc) Back" -Color DarkGreen
 	Write-Host "`n"
-	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+	Write-HostCenter "======== Written by @imluvvr on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
@@ -237,9 +271,6 @@ function Show-ScanSettingsAdvanced {
 		}
 		50	{
 			$global:scanSettings.FileScan = (-not $global:scanSettings.FileScan)
-		}
-		51 {
-			$global:scanSettings.SuspiciousScan = (-not $global:scanSettings.SuspiciousScan)
 		}
 		27	{ Show-ScanSettingsMain }
 		Default {
@@ -277,7 +308,7 @@ function Show-ScanSettingsGameSelect {
 	Write-Host
 	Write-HostCenter "Esc) Back" -Color DarkGreen
 	Write-Host "`n"
-	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+	Write-HostCenter "======== Written by @imluvvr on X ========" -Color DarkRed
 
 	$selection = Wait-ForInput
 	switch ($selection) {
@@ -302,9 +333,135 @@ function Show-EndScanScreen {
 	Write-Host
 	Write-HostCenter "======== Scan Complete ========" -Color DarkRed
 	Write-Host
-	Write-HostCenter "Scan Results Written To: $global:outputFile" -Color DarkCyan
+
+	# Collect and display suspicious findings summary
+	$suspiciousFiles = @()
+	$suspiciousDrivers = @()
+	$suspiciousDisplays = @()
+	$cheatExecutables = @()
+
+	# Extract cheat executables (avoid duplicates and registry suffixes)
+	if ($global:outputLines.ContainsKey("exe")) {
+		$seenExes = @{}
+		$seenBasePaths = @{}
+		foreach ($line in $global:outputLines["exe"]) {
+			if ($line -notmatch "^======" -and $line.Trim() -ne "") {
+				# Remove registry suffixes like .FriendlyAppName, .ApplicationCompany, etc.
+				$cleanedLine = $line -replace '\.(FriendlyAppName|ApplicationCompany|Publisher)$', ''
+				
+				# Only add if we haven't seen this base path
+				if (-not $seenBasePaths.ContainsKey($cleanedLine)) {
+					$cheatExecutables += $cleanedLine
+					$seenBasePaths[$cleanedLine] = $true
+				}
+			}
+		}
+	}
+
+	# Extract suspicious files (avoid duplicates and registry suffixes)
+	if ($global:outputLines.ContainsKey("suspicious")) {
+		$seenSusp = @{}
+		$seenBasePaths = @{}
+		foreach ($line in $global:outputLines["suspicious"]) {
+			if ($line -notmatch "^======" -and $line.Trim() -ne "") {
+				# Remove registry suffixes
+				$cleanedLine = $line -replace '\.(FriendlyAppName|ApplicationCompany|Publisher)$', ''
+				
+				# Only add if we haven't seen this base path
+				if (-not $seenBasePaths.ContainsKey($cleanedLine)) {
+					$suspiciousFiles += $cleanedLine
+					$seenBasePaths[$cleanedLine] = $true
+				}
+			}
+		}
+	}
+
+	# Extract DMA drivers (avoid duplicates and info messages)
+	if ($global:outputLines.ContainsKey("dma_drivers")) {
+		$seenDrivers = @{}
+		foreach ($line in $global:outputLines["dma_drivers"]) {
+			if ($line -match "^\[" -and $line -notmatch "^======") {
+				if (-not $seenDrivers.ContainsKey($line)) {
+					$suspiciousDrivers += $line
+					$seenDrivers[$line] = $true
+				}
+			}
+		}
+	}
+
+	# Extract suspicious displays (avoid duplicates) - only those with FLAGS
+	if ($global:outputLines.ContainsKey("display")) {
+		$seenDisplays = @{}
+		foreach ($line in $global:outputLines["display"]) {
+			if ($line -match "FLAGS:") {
+				if (-not $seenDisplays.ContainsKey($line)) {
+					$suspiciousDisplays += $line
+					$seenDisplays[$line] = $true
+				}
+			}
+		}
+	}
+
+	# Display summary
+	$totalFindings = $cheatExecutables.Count + $suspiciousFiles.Count + $suspiciousDrivers.Count + $suspiciousDisplays.Count
+
+	if ($totalFindings -gt 0) {
+		Write-HostCenter "WARNING: SUSPICIOUS FINDINGS SUMMARY" -Color Yellow -Bold
+		Write-Host
+
+		if ($cheatExecutables.Count -gt 0) {
+			Write-HostCenter "Known Cheat Executables Found: $($cheatExecutables.Count)" -Color Red -Bold
+			foreach ($exe in ($cheatExecutables | Select-Object -First 5)) {
+				$displayExe = if ($exe.Length -gt 80) { $exe.Substring(0, 77) + "..." } else { $exe }
+				Write-HostCenter "  - $displayExe" -Color Red
+			}
+			if ($cheatExecutables.Count -gt 5) {
+				Write-HostCenter "  ... and $($cheatExecutables.Count - 5) more" -Color DarkRed
+			}
+			Write-Host
+		}
+
+		if ($suspiciousFiles.Count -gt 0) {
+			Write-HostCenter "Suspicious Files Found: $($suspiciousFiles.Count)" -Color Yellow -Bold
+			foreach ($file in ($suspiciousFiles | Select-Object -First 5)) {
+				$displayFile = if ($file.Length -gt 80) { $file.Substring(0, 77) + "..." } else { $file }
+				Write-HostCenter "  - $displayFile" -Color Yellow
+			}
+			if ($suspiciousFiles.Count -gt 5) {
+				Write-HostCenter "  ... and $($suspiciousFiles.Count - 5) more" -Color DarkYellow
+			}
+			Write-Host
+		}
+
+		if ($suspiciousDrivers.Count -gt 0) {
+			Write-HostCenter "DMA/Communications Drivers Found: $($suspiciousDrivers.Count)" -Color Magenta -Bold
+			foreach ($driver in $suspiciousDrivers) {
+				$displayDriver = if ($driver.Length -gt 80) { $driver.Substring(0, 77) + "..." } else { $driver }
+				Write-HostCenter "  - $displayDriver" -Color Magenta
+			}
+			Write-Host
+		}
+
+		if ($suspiciousDisplays.Count -gt 0) {
+			Write-HostCenter "Suspicious Displays Found: $($suspiciousDisplays.Count)" -Color Cyan -Bold
+			foreach ($display in $suspiciousDisplays) {
+				$displayDisp = if ($display.Length -gt 80) { $display.Substring(0, 77) + "..." } else { $display }
+				Write-HostCenter "  - $displayDisp" -Color Cyan
+			}
+			Write-Host
+		}
+
+		Write-HostCenter "Total Suspicious Items: $totalFindings" -Color Red -Bold
+		Write-Host
+	}
+ else {
+		Write-HostCenter "No Suspicious Items Detected" -Color Green -Bold
+		Write-Host
+	}
+
+	Write-HostCenter "Full Scan Results: $global:outputFile" -Color DarkCyan
 	Write-Host
-	Write-HostCenter "======== Written by @imluvvr & @ScaRMR6 on X ========" -Color DarkRed
+	Write-HostCenter "======== Written by @imluvvr on X ========" -Color DarkRed
 
 	Write-Host "`n"
 	Write-HostCenter "Press any key to continue..." -Color DarkGray
@@ -318,7 +475,7 @@ function Show-ExitScreen {
 	Write-HostCenter "======== Windows OS Deep Scan ========" -Color DarkRed
 	Write-Host
 	Write-HostCenter "Main Developer: @imluvvr on X" -Color DarkCyan
-	Write-HostCenter "Hardware Info Scans: @ScaRMR6 on X" -Color DarkCyan
+	Write-HostCenter "BIOS Info Detections: @ScaRMR6 on X" -Color DarkCyan
 	Write-Host
 	Write-HostCenter "======== Program Exited ========" -Color DarkRed
 	Write-Host
@@ -490,7 +647,8 @@ function Write-OutputFile {
 	$global:outputLines["footer"] = @(
 		"`n========================================",
 		"Scan Completed: $(Get-Date -Format 'yyyy-MM-dd @ HH:mm:ss')",
-		"`nWritten by @imluvvr & @ScaRMR6 on X"
+		"",
+		"Written by @imluvvr on X"
 	)
 
 	foreach ($line in $global:outputLines["header"]) {
@@ -521,6 +679,14 @@ function Write-OutputFile {
 	
 	if ($global:outputLines.ContainsKey("suspicious")) {
 		foreach ($line in $global:outputLines["suspicious"]) {
+			Add-Content -Path $global:outputFile -Value $line
+		}
+	}
+
+	# DMA DRIVER SCAN WRITES
+
+	if ($global:outputLines.ContainsKey("dma_drivers")) {
+		foreach ($line in $global:outputLines["dma_drivers"]) {
 			Add-Content -Path $global:outputFile -Value $line
 		}
 	}
@@ -647,11 +813,21 @@ function Test-ContainsValidWord {
 function Get-SuspiciousFiles {
 	$files = @()
 	$fdict = @(
-		"fsquirt", "wmplayer", "vslauncher", "discord", "control", "netplwiz", "powershell", "nvcplui", "pickerhost", "chipset", "cleanmgr", "spotify", "steam", "adobe", "ubisoft"
+		"fsquirt", "wmplayer", "vslauncher", "discord", "control", "netplwiz", "powershell", "nvcplui", "pickerhost", "chipset", "cleanmgr", "spotify", "steam", "adobe", "ubisoft",
+		"fabfilter", "waves", "valhalla", "antares", "waveslicenseengine", "sysinternals", "bundle", "minecraft", "getintopc", "autotune", "total",
+		"microsoft", "windows", "nvidia", "intel", "amd", "google", "chrome", "firefox", "edge", "opera", "brave",
+		"office", "word", "excel", "powerpoint", "outlook", "onenote", "teams", "onedrive", "skype",
+		"visualstudio", "vscode", "jetbrains", "pycharm", "intellij", "rider", "webstorm", "phpstorm",
+		"photoshop", "illustrator", "premiere", "aftereffects", "lightroom", "audition", "animate", "dreamweaver",
+		"ableton", "cubase", "flstudio", "logic", "protools", "reaper", "reason", "studio", "fruity",
+		"serum", "massive", "omnisphere", "nexus", "sylenth", "spire", "dune", "pigments", "vital",
+		"kontakt", "komplete", "reaktor", "battery", "maschine", "traktor", "guitar", "keyscape",
+		"blender", "maya", "max", "cinema4d", "houdini", "zbrush", "substance", "unreal", "unity",
+		"obs", "streamlabs", "xsplit", "voicemeeter", "audacity", "davinci", "resolve", "vegas", "camtasia"
 	)
 	$falsePositives = @{}
 	$adict = @(
-		"loader", "dma", "client", "cheat", "launcher", "ring1", "klar", "lethal", "cheatarmy"
+		"loader", "dma", "client", "cheat", "launcher", "ring1", "klar", "lethal", "cheatarmy", 'aqua', 'arctic'
 	)
 	$alwaysFlag = @{}
 	foreach ($entry in $fdict) {
@@ -662,22 +838,39 @@ function Get-SuspiciousFiles {
 	}
 	switch ($global:selectedGame) {
 		"Rainbow Six Siege" {
-			foreach ($entry in @("bun", "demoncore", "crusader", "tomware", "hydro", "goldcore", "mojojojo")) {
+			foreach ($entry in @(
+					"bun", "demoncore", "crusader", "tomware", "hydro", "goldcore", "mojo", 'dogo', 'hex', 'perc', 'kraken', 'inferno', 'frost', 'aptitude',
+					"phantom", "overlay", "aimex", "engineowning", "iwantcheats", "battlelog", "artificialaiming", "skycheats", "privatecheatz",
+					"securecheats", "unknowncheats", "systemcheats", "aimgods", "elitepvpers", "interium", "wemod", "trainer",
+					"injector", "external", "internal", "bypass", "spoofer", "eac", "battleye"
+				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
 		}
 		"Counter Strike" {
-			foreach ($entry in @("predator", "plague")) {
+			foreach ($entry in @(
+					"predator", "plague", "passathook", "osiris", "gamesense", "aimware", "onetap", "neverlose",
+					"primordial", "fatality", "inuria", "legendware", "nixware", "interium", "phantom", "overlay",
+					"skycheats", "privatecheatz", "securecheats", "systemcheats", "hvh", "legitbot", "ragebot"
+				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
 		}
 		"Call of Duty: Black Ops 6" {
-			foreach ($entry in @("octave", "meta", "zen")) {
+			foreach ($entry in @(
+					"octave", "meta", "zen", "phantom", "overlay", "aimex", "engineowning", "iwantcheats",
+					"skycheats", "privatecheatz", "securecheats", "systemcheats", "aimgods", "cronuszen", "cronus",
+					"battlelog", "artificialaiming", "mod", "menu", "injector", "ricochet"
+				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
 		}
 		"Fortnite" {
-			foreach ($entry in @("blurred", "hyper", "dope")) {
+			foreach ($entry in @(
+					"blurred", "hyper", "dope", "phantom", "overlay", "artificialaiming", "iwantcheats",
+					"skycheats", "privatecheatz", "securecheats", "systemcheats", "softaim", "aimbot",
+					"esp", "wallhack", "radar", "injector", "eac", "battleye"
+				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
 		}
@@ -697,12 +890,18 @@ function Get-SuspiciousFiles {
 			}
 		}
 		"Valorant" {
-			foreach ($entry in @("sky")) {
+			foreach ($entry in @(
+					"sky", "phantom", "overlay", "skycheats", "privatecheats", "securecheats", "systemcheats",
+					"artificialaiming", "iwantcheats", "vanguard", "bypass", "spoofer", "injector", "external"
+				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
 		}
 		"Apex Legends" {
-			foreach ($entry in @("kuno")) {
+			foreach ($entry in @(
+					"kuno", "phantom", "overlay", "skycheats", "privatecheats", "securecheats", "systemcheats",
+					"artificialaiming", "iwantcheats", "aimgods", "esp", "aimbot", "triggerbot", "eac", "bypass"
+				)) {
 				$alwaysFlag[$entry.ToLower()] = $true
 			}
 		}
@@ -739,7 +938,7 @@ function Get-SuspiciousFiles {
 	$stream.Close()
 	$res.Close()
 	Clear-CurrentLine
-	Write-HostCenter ">> Dictionary Downloaded <<`n" -Color Green
+	Write-HostCenter "Dictionary Downloaded`n" -Color Green
 
 	Write-HostCenter "Building Filter Hash..." -Color Green
 	$words = ((Get-Content $tempFile) -split "`n") | Sort-Object Length -Descending
@@ -749,7 +948,7 @@ function Get-SuspiciousFiles {
 			$null = $wordSet.Add($_)
 		}
 	}
-	Write-HostCenter ">> Done! <<`n" -Color Green
+	Write-HostCenter "Done!`n" -Color Green
 
 	Write-HostCenter "Sifting Through Files..." -Color Green
 	$i = 0
@@ -759,14 +958,33 @@ function Get-SuspiciousFiles {
 
 		$nameOnly = Get-BaseNameWithoutExe -InputString $filename.ToLower()
 
-		if ($alwaysFlag.ContainsKey($nameOnly)) {
+		$falseFlag = $false
+		foreach ($flagword in $falsePositives.Keys) {
+			if ($nameOnly -like "*$flagword*") {
+				$falseFlag = $true
+				break
+			}
+		}
+		if ($falseFlag) {
+			continue
+		}
+		$foundAlwaysFlag = $false
+		foreach ($flagword in $alwaysFlag.Keys) {
+			if ($nameOnly -like "*$flagword*") {
+				# Skip if it contains known legitimate software patterns
+				if ($nameOnly -like "*fabfilter*" -or $nameOnly -like "*bundle*" -or $nameOnly -like "*waves*" -or 
+				    $nameOnly -like "*valhalla*" -or $nameOnly -like "*antares*" -or $nameOnly -like "*sysinternals*") {
+					continue
+				}
+				$foundAlwaysFlag = $true
+				break
+			}
+		}
+		if ($foundAlwaysFlag) {
 			$files = , "$filename" + $files
 			continue
 		}
 		if (Test-ContainsValidWord -name $nameOnly -wordSet $wordSet) {
-			continue
-		}
-		if ($falsePositives.ContainsKey($nameOnly)) {
 			continue
 		}
 
@@ -797,7 +1015,7 @@ function Get-SuspiciousFiles {
 	}
 
 	Clear-CurrentLine
-	Write-HostCenter ">> Found $($files.Count) Suspicious Files <<`n" -Color Green
+	Write-HostCenter "Found $($files.Count) Suspicious Files`n" -Color Green
 	
 	if ($files.Count -gt 0) {
 		$global:outputLines["suspicious"] = @("`n======== SUSPICIOUS FILES ========")
@@ -809,7 +1027,7 @@ function Get-SuspiciousFiles {
 	if (Test-Path $tempFile) {
 		Write-HostCenter "Cleaning up temporary dictionary file..." -Color Green
 		Remove-Item $tempFile -Force
-		Write-HostCenter ">> Done! <<`n" -Color Green
+		Write-HostCenter "Done!`n" -Color Green
 	}
 }
 
@@ -910,7 +1128,7 @@ function Get-ExecutionHistoryFromEventLogs {
  catch {
 		$global:outputLines["sys"] += "Failed to read event logs: $_"
 	}
-	Write-HostCenter ">> Event log scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Event log scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Read Prefetch Folder ===
@@ -928,7 +1146,7 @@ function Get-ExecutablesFromPrefetch {
  else {
 		$global:outputLines["prefetch"] += "Prefetch folder not found."
 	}
-	Write-HostCenter ">> Prefetch scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Prefetch scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Read MUI Cache Registry ===
@@ -947,7 +1165,7 @@ function Get-ExecutablesFromMuiCache {
  else {
 		$global:outputLines["registry"] += "MuiCache not found."
 	}
-	Write-HostCenter ">> MUI Cache scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> MUI Cache scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Read Executables from AppSwitched ===
@@ -967,7 +1185,7 @@ function Get-AppSwitched {
 	else {
 		$global:outputLines["registry"] += "Registry path not found: $keypath"
 	}
-	Write-HostCenter ">> AppSwitched scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> AppSwitched scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Read Executables from Registry ===
@@ -993,7 +1211,7 @@ function Get-ExecutablesFromRegistry {
 			$global:outputLines["registry"] += "Registry path not found: $key"
 		}
 	}
-	Write-HostCenter ">> Registry scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Registry scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Read Executables from Encoded Registry ===
@@ -1019,7 +1237,7 @@ function Get-EncodedExecutablesFromRegistry {
 			$global:outputLines["registry"] += "Registry path not found: $key"
 		}
 	}
-	Write-HostCenter ">> Encoded Registry scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Encoded Registry scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Open Network Ports ===
@@ -1044,7 +1262,7 @@ function Get-OpenNetworkPorts {
  catch {
 		$global:outputLines["network"] += "Failed to retrieve port info: $_"
 	}
-	Write-HostCenter ">> Port scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Port scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: DMA-capable Devices ===
@@ -1056,7 +1274,7 @@ function Get-DevicesInfo {
 		$devices = Get-PnpDevice -PresentOnly | Where-Object { $_.Class -match "USB|Net|Mouse|SoftwareDevice" }
 		foreach ($dev in $devices) {
 			if (-not $types.ContainsKey("$($dev.Class)")) { $types["$($dev.Class)"] = @() }
-			$types["$($dev.Class)"] += "$($dev.Class) | $($dev.FriendlyName) - $($dev.Status)"
+			$types["$($dev.Class)"] += "$($dev.Class) - $($dev.FriendlyName) - $($dev.Status)"
 		}
 	}
  catch {
@@ -1067,7 +1285,7 @@ function Get-DevicesInfo {
 			$global:outputLines["device"] += $d
 		}
 	}
-	Write-HostCenter ">> Device scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Device scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: PCIe Devices (like GPU) ===
@@ -1086,7 +1304,7 @@ function Get-PCIeDevices {
 		else {
 			foreach ($device in $pcieDevices) {
 				if (-not $types.ContainsKey($device.Class)) { $types["$($device.Class)"] = @() }
-				$desc = "$($device.Class) | $($device.FriendlyName) - $($device.Status)"
+				$desc = "$($device.Class) - $($device.FriendlyName) - $($device.Status)"
 				$types["$($device.Class)"] += $desc
 			}
 		}
@@ -1099,7 +1317,7 @@ function Get-PCIeDevices {
 			$global:outputLines["pcie"] += $d
 		}
 	}
-	Write-HostCenter ">> PCIe device scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> PCIe device scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Recently Closed Applications ===
@@ -1128,7 +1346,7 @@ function Get-RecentlyClosedApps {
  catch {
 		$global:outputLines["sys"] += "Failed to read closed app data: $_"
 	}
-	Write-HostCenter ">> Recently closed app scan complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Recently closed app scan complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: BIOS & Motherboard Info ===
@@ -1144,11 +1362,11 @@ function Get-BIOSInfo {
  catch {
 		$global:outputLines["bios"] += "Failed to retrieve BIOS info: $_"
 	}
-	Write-HostCenter ">> BIOS info collected! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> BIOS info collected! `<`<`n" -Color DarkGreen
 }
 
 function Get-MotherboardInfo {
-	Write-HostCenter "Collecting Motherboard & I/O Information..." -Color Green -Bold
+	Write-HostCenter "Collecting Motherboard `& I/O Information..." -Color Green -Bold
 	$global:outputLines["motherboard"] = @("`n======== MOTHERBOARD INFORMATION ========")
 	try {
 		$board = Get-CimInstance -ClassName Win32_BaseBoard
@@ -1159,7 +1377,7 @@ function Get-MotherboardInfo {
  catch {
 		$global:outputLines["motherboard"] += "Failed to retrieve motherboard info: $_"
 	}
-	Write-HostCenter ">> Motherboard info collected! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Motherboard info collected! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: BIOS DMA-Related Settings (via Windows) ===
@@ -1195,14 +1413,14 @@ function Get-FirmwareSecurityState {
  catch {
 		$global:outputLines["firmware"] += "TPM: Unable to query"
 	}
-	Write-HostCenter ">> Firmware security checks complete! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Firmware security checks complete! `<`<`n" -Color DarkGreen
 }
 
 # === FUNCTION: Fetch Browser Download History
 function Get-BrowserDownloadHistory {
 	if (-not $global:sqlite3) { Install-SQLite3 }
 	if (-not $global:sqlite3) {
-		Write-HostCenter ">> Failed to Index Browser Download History <<`n`n" -Color Red -NoNewline
+		Write-HostCenter "`>`> Failed to Index Browser Download History `<`<`n`n" -Color Red -NoNewline
 		return $null
 	}
 
@@ -1221,7 +1439,7 @@ function Get-BrowserDownloadHistory {
 
 		if ($browser -eq "Firefox") {
 			if (Test-Path $path) {
-				Write-HostCenter "> Firefox Browser Support Coming Soon <" -Color Yellow
+				Write-HostCenter "Firefox Browser Support Coming Soon" -Color Yellow
 			}
 		}
 		else {
@@ -1241,19 +1459,19 @@ function Get-BrowserDownloadHistory {
 				foreach ($line in $output) {
 					Show-CustomProgress -current $progress -total ($output.Count) -prefix "Indexing $browser..." -Color Green
 					$progress += 1
-					if ($line -match "(.+)\|(.+)\|(.+)") {
+					if ($line -match '(.+)\|(.+)\|(.+)') {
 						$result = [PSCustomObject]@{
 							Browser      = $browser
 							FilePath     = $matches[1].Trim()
 							DownloadDate = $matches[2].Trim()
 							URL          = $matches[3].Trim()
 						}
-						$global:outputLines["browser"] += "$($result.FilePath), $($result.URL), $($result.DownloadDate)"
+						$global:outputLines["browser"] += "$($result.FilePath) - $($result.URL) - $($result.DownloadDate)"
 						$global:foundFiles += $result.FilePath
 					}
 				}
 				Clear-CurrentLine
-				Write-HostCenter "> Indexed $browser <`n" -Color Green -NoNewline
+				Write-HostCenter "Indexed $browser`n" -Color Green -NoNewline
 
 				Remove-Item $tempCopy -Force
 			}
@@ -1261,7 +1479,7 @@ function Get-BrowserDownloadHistory {
 	}
 	Clear-CurrentLine
 	Write-Host
-	Write-HostCenter ">> Indexed Browser Download History <<`n`n" -Color Green -NoNewline
+	Write-HostCenter "`>`> Indexed Browser Download History `<`<`n`n" -Color Green -NoNewline
 	Invoke-SQLite3Cleanup
 }
 
@@ -1306,7 +1524,7 @@ function Get-KnownCheatExecutables {
 	Show-CustomProgress -current ($allDrives.Length) -total ($allDrives.Length) -Color DarkGreen
 
 	Clear-CurrentLine
-	Write-HostCenter ">> Found $($foundFiles.Length) <<`n" -Color Green
+	Write-HostCenter "`>`> Found $($foundFiles.Length) `<`<`n" -Color Green
 
 	Write-HostCenter "Indexing Found Executables..." -Color Green
 
@@ -1356,7 +1574,7 @@ function Get-KnownCheatExecutables {
 	}
 
 	Clear-CurrentLine
-	Write-HostCenter ">> Done! <<`n" -Color Green
+	Write-HostCenter "`>`> Done! `<`<`n" -Color Green
 
 	if ($cheatFiles.Length -gt 0) {
 		$global:outputLines["exe"] = @("`n======== CHEAT EXECUTABLES ========")
@@ -1369,44 +1587,216 @@ function Get-KnownCheatExecutables {
 #endregion
 #region DMA Scan
 
+function Get-DMADrivers {
+	Write-HostCenter "Scanning for DMA/Communication Drivers..." -Color Green -Bold
+	$global:outputLines["dma_drivers"] = @("`n======== DMA/COMMUNICATIONS DRIVER SCAN ========")
+	$suspiciousDrivers = @()
+	
+	try {
+		# Get all drivers
+		$allDrivers = Get-WindowsDriver -Online -All -ErrorAction SilentlyContinue
+		
+		foreach ($driver in $allDrivers) {
+			$driverName = $driver.OriginalFileName
+			$driverProvider = $driver.ProviderName
+			$driverClass = $driver.ClassName
+			$driverVersion = $driver.Version
+			$driverDate = $driver.Date
+			
+			# Check against known DMA driver patterns
+			foreach ($dmaType in $global:dmaDrivers.Keys) {
+				$patterns = $global:dmaDrivers[$dmaType]
+				foreach ($pattern in $patterns) {
+					if ($driverName -match $pattern -or $driverProvider -match $pattern) {
+						$suspiciousDrivers += [PSCustomObject]@{
+							Type       = $dmaType
+							DriverName = $driverName
+							Provider   = $driverProvider
+							Class      = $driverClass
+							Version    = $driverVersion
+							Date       = $driverDate
+						}
+						break
+					}
+				}
+			}
+		}
+		
+		# Also check PnP devices for serial communication devices
+		$serialDevices = Get-PnpDevice -Class "Ports" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "OK" }
+		foreach ($device in $serialDevices) {
+			$deviceName = $device.FriendlyName
+			$deviceID = $device.InstanceId
+			
+			foreach ($dmaType in $global:dmaDrivers.Keys) {
+				$patterns = $global:dmaDrivers[$dmaType]
+				foreach ($pattern in $patterns) {
+					if ($deviceName -match $pattern -or $deviceID -match $pattern) {
+						# Check if already added
+						$exists = $suspiciousDrivers | Where-Object { $_.DriverName -eq $deviceName }
+						if (-not $exists) {
+							$suspiciousDrivers += [PSCustomObject]@{
+								Type       = $dmaType
+								DriverName = $deviceName
+								Provider   = "PnP Device"
+								Class      = "Ports"
+								Version    = "N/A"
+								Date       = "N/A"
+								DeviceID   = $deviceID
+							}
+						}
+						break
+					}
+				}
+			}
+		}
+		
+	}
+ catch {
+		$global:outputLines["dma_drivers"] += "Error scanning drivers: $_"
+	}
+	
+	if ($suspiciousDrivers.Count -gt 0) {
+		$global:outputLines["dma_drivers"] += "`nWARNING: Found $($suspiciousDrivers.Count) DMA/Arduino-Related Driver(s)"
+		$global:outputLines["dma_drivers"] += "These drivers are commonly used with DMA cards, Arduino boards, and other hardware cheating devices.`n"
+		
+		foreach ($driver in $suspiciousDrivers) {
+			Write-HostCenter "WARNING Found: [$($driver.Type)] $($driver.DriverName)" -Color Yellow
+			$line = "[$($driver.Type)] $($driver.DriverName)"
+			if ($driver.Provider -ne "PnP Device") {
+				$line += " | Provider: $($driver.Provider) | Version: $($driver.Version)"
+				if ($driver.Date) {
+					$line += " | Date: $($driver.Date)"
+				}
+			}
+			else {
+				if ($driver.DeviceID) {
+					$line += " | Device ID: $($driver.DeviceID)"
+				}
+			}
+			$global:outputLines["dma_drivers"] += $line
+		}
+		
+		$global:outputLines["dma_drivers"] += "`nNote: FTDI, CH340/CH341, PL2303, and CP210x drivers are used by:"
+		$global:outputLines["dma_drivers"] += "- DMA cards - PCILeech and Squirrel and similar hardware"
+		$global:outputLines["dma_drivers"] += "- Arduino boards and development kits"
+		$global:outputLines["dma_drivers"] += "- USB-to-Serial adapters and programmers"
+		$global:outputLines["dma_drivers"] += "- Various hardware debugging tools"
+		$global:outputLines["dma_drivers"] += "Having these drivers does NOT confirm cheating, but warrants investigation."
+	}
+ else {
+		$global:outputLines["dma_drivers"] += "No suspicious DMA/Communications drivers detected."
+	}
+	
+	Write-HostCenter "`>`> DMA Driver scan complete! `<`<`n" -Color Green
+}
+
 function Get-SuspiciousDisplayInfo {
-	Write-HostCenter "Fetching Display Adapter Information..." -Color Green
+	Write-HostCenter "Fetching Display Adapter Information (Connected `& Disconnected)..." -Color Green
 	$global:outputLines["display"] = @("`n======== DISPLAY INFORMATION ========")
-	$results = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object {
+	
+	# Get all monitors from registry (includes disconnected ones)
+	$registryMonitors = @()
+	try {
+		$monitorPaths = @(
+			"HKLM:\SYSTEM\CurrentControlSet\Enum\DISPLAY"
+		)
+		foreach ($path in $monitorPaths) {
+			if (Test-Path $path) {
+				Get-ChildItem -Path $path -ErrorAction SilentlyContinue | ForEach-Object {
+					$monitorKey = $_.PSPath
+					Get-ChildItem -Path $monitorKey -ErrorAction SilentlyContinue | ForEach-Object {
+						$deviceKey = $_.PSPath
+						$props = Get-ItemProperty -Path $deviceKey -ErrorAction SilentlyContinue
+						if ($props) {
+							$registryMonitors += [PSCustomObject]@{
+								FriendlyName = $props.FriendlyName
+								DeviceDesc   = $props.DeviceDesc
+								Mfg          = $props.Mfg
+								HardwareID   = $props.HardwareID
+								Path         = $deviceKey
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+ catch {
+		$global:outputLines["display"] += "Failed to read registry monitors: $_"
+	}
+
+	# Get currently connected monitors
+	$results = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID -ErrorAction SilentlyContinue | ForEach-Object {
 		$manufacturer = [System.Text.Encoding]::ASCII.GetString($_.ManufacturerName) -replace '\0', ''
 		$productCode = [System.Text.Encoding]::ASCII.GetString($_.ProductCodeID) -replace '\0', ''
 		$serial = [System.Text.Encoding]::ASCII.GetString($_.SerialNumberID) -replace '\0', ''
 		$userFriendlyName = [System.Text.Encoding]::ASCII.GetString($_.UserFriendlyName) -replace '\0', ''
+		$yearOfManufacture = $_.YearOfManufacture
+		$weekOfManufacture = $_.WeekOfManufacture
 
-		$isSuspiciousLength = ($userFriendlyName.Length -le 6)
 		$isGeneric = ($userFriendlyName -match "Generic" -or $userFriendlyName -eq "")
+		$manufacturerValid = $global:edidManufacturers.ContainsKey($manufacturer)
+		$manufacturerName = if ($manufacturerValid) { $global:edidManufacturers[$manufacturer] } else { "Unknown" }
 
 		[PSCustomObject]@{
-			Manufacturer     = $manufacturer
-			ProductCode      = $productCode
-			SerialNumber     = $serial
-			UserFriendlyName = $userFriendlyName
-			SuspiciousLength = ($isSuspiciousLength)
-			GenericOrEmpty   = ($isGeneric)
-			PossibleFuser    = ($isSuspiciousLength -or $isGeneric)
+			Manufacturer        = $manufacturer
+			ManufacturerName    = $manufacturerName
+			ProductCode         = $productCode
+			SerialNumber        = $serial
+			UserFriendlyName    = $userFriendlyName
+			YearOfManufacture   = $yearOfManufacture
+			WeekOfManufacture   = $weekOfManufacture
+			GenericOrEmpty      = $isGeneric
+			InvalidManufacturer = -not $manufacturerValid
+			Connected           = $true
+			PossibleFuser       = ($isGeneric -or (-not $manufacturerValid))
 		}
 	}
 
+	$global:outputLines["display"] += "`n--- CONNECTED DISPLAYS ---"
+	if ($results.Count -eq 0) {
+		$global:outputLines["display"] += "No connected displays detected!"
+	}
 	foreach ($display in $results) {
-		Write-HostCenter "Found: $($display.UserFriendlyName) - $($display.SerialNumber)" -Color Green
-		if ($display.PossibleFuser) {
-			if ($display.GenericOrEmpty) {
-				$global:outputLines["display"] += "$($display.UserFriendlyName) - $($display.SerialNumber), $($display.Manufacturer) | POSSIBLE FUSER: Generic/Empty"
-			}
-			elseif ($display.SuspiciousLength) {
-				$global:outputLines["display"] += "$($display.UserFriendlyName) - $($display.SerialNumber), $($display.Manufacturer) | POSSIBLE FUSER: Suspicious Length"
-			}
+		Write-HostCenter "Connected: $($display.UserFriendlyName) - $($display.SerialNumber)" -Color Green
+		$line = "[$($display.Manufacturer)] $($display.UserFriendlyName) - SN: $($display.SerialNumber)"
+		if ($display.YearOfManufacture) {
+			$line += " | Mfg: Week $($display.WeekOfManufacture)/$($display.YearOfManufacture)"
 		}
-		else {
-			$global:outputLines["display"] += "$($display.UserFriendlyName) - $($display.SerialNumber), $($display.Manufacturer)"
+		
+		$flags = @()
+		if ($display.GenericOrEmpty) { $flags += "Generic/Empty" }
+		if ($display.InvalidManufacturer) { $flags += "Unknown Mfg Code" }
+		
+		if ($flags.Count -gt 0) {
+			$line += " | FLAGS: $($flags -join ', ')"
+		}
+		$global:outputLines["display"] += $line
+	}
+
+	# Check for disconnected monitors in registry
+	$global:outputLines["display"] += "`n--- DISCONNECTED DISPLAYS (Registry History) ---"
+	$disconnectedCount = 0
+	foreach ($regMonitor in $registryMonitors) {
+		if ($regMonitor.FriendlyName -or $regMonitor.DeviceDesc) {
+			$name = if ($regMonitor.FriendlyName) { $regMonitor.FriendlyName } else { $regMonitor.DeviceDesc }
+			# Check if this monitor is currently connected
+			$isConnected = $results | Where-Object { $_.UserFriendlyName -match [regex]::Escape($name) }
+			if (-not $isConnected) {
+				$disconnectedCount++
+				$global:outputLines["display"] += "Disconnected: $name | Mfg: $($regMonitor.Mfg)"
+				if ($regMonitor.HardwareID) {
+					$global:outputLines["display"] += "  Hardware ID: $($regMonitor.HardwareID[0])"
+				}
+			}
 		}
 	}
-	Write-HostCenter ">> Done! <<`n" -Color Green
+	if ($disconnectedCount -eq 0) {
+		$global:outputLines["display"] += "No disconnected display history found."
+	}
+	
+	Write-HostCenter "`>`> Found $($results.Count) connected, $disconnectedCount disconnected `<`<`n" -Color Green
 }
 
 function Get-SuspiciousNetAdapters {
@@ -1500,7 +1890,7 @@ function Get-RainbowSixData {
 		$global:outputLines["r6"] += "No Rainbow Six Accounts Found!"
 	}
 	Write-Host
-	Write-HostCenter ">> Rainbow Six Siege Accounts Revealed! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Rainbow Six Siege Accounts Revealed! `<`<`n" -Color DarkGreen
 	Start-Sleep -Milliseconds 800
 }
 
@@ -1554,7 +1944,7 @@ function Get-CounterStrikeData {
 		$global:outputLines["cs"] += "No CS2 accounts found!"
 	}
 	Write-Host
-	Write-HostCenter ">> Counter Strike Accounts Revealed! <<`n" -Color DarkGreen
+	Write-HostCenter "`>`> Counter Strike Accounts Revealed! `<`<`n" -Color DarkGreen
 	Start-Sleep -Milliseconds 800
 }
 
@@ -1575,7 +1965,7 @@ function Start-BaseScan {
 
 	Write-Host
 	Write-HostCenter "Starting PC scan -> Executables Data...`n" -Color Magenta
-	$global:outputLines["registry"] = @("`n======== REGISTRY & CACHE SCAN ========")
+	$global:outputLines["registry"] = @("`n======== REGISTRY `& CACHE SCAN ========")
 
 	Get-ExecutablesFromMuiCache
 	Get-ExecutablesFromRegistry
@@ -1608,9 +1998,10 @@ function Start-BaseScan {
 	Clear-Host
 
 	Write-Host
-	Write-HostCenter "Starting DMA-Specific Scans & Diagnostics" -Color Magenta
+	Write-HostCenter "Starting DMA-Specific Scans `& Diagnostics" -Color Magenta
 	Write-HostCenter "Note: This part of the scan may be unreliable due to the`ncomplex nature of DMAs" -Color DarkGray
 	Write-Host
+	Get-DMADrivers
 	Get-SuspiciousDisplayInfo
 	Get-SuspiciousNetAdapters
 
@@ -1634,15 +2025,14 @@ function Start-BaseScan {
 		Start-Sleep -Milliseconds 800
 	}
 
-	if ($global:scanSettings.SuspiciousScan) {
-		Clear-Host
-		Write-Host
-		Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
-		Write-HostCenter "Note: This Could Take A While...`n" -Color DarkGray
-		Get-SuspiciousFiles
+	Clear-Host
+	Write-Host
+	Write-HostCenter "Scanning Found Files for Suspicious Activity" -Color Magenta
+	Write-HostCenter "Note: This Could Take A While..." -Color DarkGray
+	Write-Host
+	Get-SuspiciousFiles
 
-		Start-Sleep -Milliseconds 800
-	}
+	Start-Sleep -Milliseconds 800
 }
 
 function Start-BasicScan {
